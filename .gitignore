@@ -1,0 +1,16 @@
+build/
+out/
+*.obj
+*.pdb
+*.ilk
+*.exp
+*.lib
+*.dll
+*.so
+*.dylib
+# nunca versionar material da Video Copilot
+*.ofp
+*.lic
+Optical Flares Presets/
+Optical Flares Textures/
+tmp/
