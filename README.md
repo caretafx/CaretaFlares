@@ -9,3 +9,11 @@ Nenhum arquivo da Video Copilot (código, presets, texturas, licença) entra nes
 Uso pessoal; nada é publicado.
 
 Documentos em `docs/`, na ordem numérica. Ferramentas auxiliares em `tools/`.
+
+## Estado (2026-10-21)
+
+- `docs/01-inventario-e-plano.md`: inventário e plano.
+- `docs/02-formato-ofp.md`: formato dos presets e do estado salvo no `.nk`.
+- `docs/03-comportamento-render.md`: knobs, pipeline e matemática de cada elemento.
+- `tools/ofp_dump.py`: leitor/validador de `.ofp` (lê os 243 presets instalados sem erro).
+- `tools/peinfo.py`, `tools/exports.py`: inspeção de PE usada no inventário.

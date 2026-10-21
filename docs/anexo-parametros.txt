@@ -1,0 +1,199 @@
+# Anexo: parametros por tipo de objeto (extraido da fabrica de objetos do DLL 1.0.86)
+# Formato: case <tipo de objeto> id=<id> <tipo do parametro> <rotulo> def=<padrao> min= max= (? = nao recuperado)
+# 'case 0..5' do primeiro bloco sao os grupos comuns (0 Common Settings, 1 Colorize, 2 Advanced, 3 Matte Box, 4 Dynamic Triggering, 5 Animation)
+# No segundo bloco, 'case 15' vale para Iris (15) e Multi Iris (4); 'case 14' = Lens Orbs; 11 = Spike Ball; 12 = Caustic
+
+===== fn_0x180078790.c
+  case 0    id=24   divider  Common Settings              def=None       min=None     max=None
+  case 0    id=0    float    Brightness                   def=None       min=None     max=None
+  case 0    id=1    float    Scale                        def=None       min=None     max=None
+  case 0    id=85   xy       Stretch                      def=None       min=None     max=None
+  case 0    id=2    xy       Distance                     def=None       min=None     max=None
+  case 0    id=103  float    Distance                     def=None       min=None     max=None
+  case 0    id=3    xy       Offset                       def=None       min=None     max=None
+  case 0    id=6    enum     Translation                  def=None       min=None     max=None
+  case 0    id=23   xy       Custom Translation           def=None       min=None     max=None
+  case 1    id=24   divider  Colorize                     def=None       min=None     max=None
+  case 1    id=7    enum     Color Source                 def=None       min=None     max=None
+  case 1    id=4    color    Color 1                      def=None       min=None     max=None
+  case 1    id=102  color    Color 2                      def=None       min=None     max=None
+  case 1    id=92   float    Gradient Loops               def=None       min=None     max=None
+  case 1    id=97   float    Gradient Offset              def=None       min=None     max=None
+  case 2    id=24   divider  Advanced Settings            def=None       min=None     max=None
+  case 2    id=10   bool?    Ignore 3D Perspective        def=None       min=None     max=None
+  case 2    id=26   bool?    Ignore Global Brightness     def=None       min=None     max=None
+  case 3    id=24   divider  Matte Box Controls           def=None       min=None     max=None
+  case 3    id=39   float    Start Range Offset           def=0          min=None     max=None
+  case 4    id=24   divider  Dynamic Triggering           def=None       min=None     max=None
+  case 4    id=106  bool?    Enable Trigger               def=None       min=None     max=None
+  case 4    id=75   float    Brightness Offset            def=None       min=None     max=None
+  case 4    id=76   float    Scale Offset                 def=None       min=None     max=None
+  case 4    id=123  xy       Stretch Offset               def=None       min=None     max=None
+  case 4    id=107  float    Rotation Offset              def=None       min=Rotation Offset max=None
+  case 4    id=78   float    Completion Offset            def=None       min=Completion Offset max=None
+  case 4    id=86   float    Outline Intensity Offset     def=None       min=Outline Intensity Offset max=None
+  case 4    id=96   float    Spread Offset                def=None       min=Spread Offset max=None
+  case 4    id=121  float    Thickness Offset             def=None       min=Thickness Offset max=None
+  case 4    id=83   color    Color Shift                  def=None       min=Color Shift max=None
+  case 4    id=71   enum     Trigger Type                 def=None       min=Trigger Type max=None
+  case 4    id=81   enum     Trigger Mode                 def=None       min=Trigger Mode max=None
+  case 4    id=99   bool?    Invert Trigger               def=None       min=Invert Trigger max=None
+  case 4    id=77   float    Border Width                 def=None       min=Border Width max=None
+  case 4    id=72   float    Expansion                    def=None       min=Expansion max=None
+  case 4    id=80   float    Inner Falloff Range          def=None       min=Inner Falloff Range max=None
+  case 4    id=73   float    Outer Falloff Range          def=None       min=Outer Falloff Range max=None
+  case 4    id=74   enum     Falloff Type                 def=None       min=Falloff Type max=None
+  case 4    id=122  xy       Trigger Stretch              def=None       min=Trigger Stretch max=None
+  case 4    id=79   bool?    Preview Trigger              def=None       min=Preview Trigger max=None
+  case 4    id=82   xy       Offset Trigger Location      def=None       min=Offset Trigger Location max=None
+  case 4    id=88   bool?    1-Way Brightness             def=None       min=1-Way Brightness max=None
+  case 4    id=89   bool?    1-Way Scale                  def=None       min=1-Way Scale max=None
+  case 5    id=24   divider  Animation Controls           def=None       min=Animation Controls max=None
+  case 5    id=110  bool?    Enable                       def=None       min=Enable   max=None
+  case 5    id=108  float    Speed                        def=None       min=Speed    max=None
+  case 5    id=109  float    Amount                       def=None       min=None     max=None
+===== fn_0x18007a700.c
+  case 1    id=5    float    Rotation                     def=0          min=(0, 2)   max=None
+  case 1    id=41   enum     Auto Rotate                  def=0          min=None|To Light|To Center max=None
+  case 1    id=24   divider  Glow Controls                def=None       min=? max=None
+  case 2    id=5    float    Rotation                     def=0          min=(0, 2)   max=None
+  case 2    id=41   enum     Auto Rotate                  def=0          min=None|To Light|To Center max=None
+  case 2    id=24   divider  Streak Controls              def=None       min=? max=None
+  case 2    id=69   float    Length                       def=40.0       min=(500.0, 0) max=None
+  case 2    id=67   float    Thickness                    def=110.0      min=(500.0, 3) max=None
+  case 2    id=68   float    Core Intensity               def=200.0      min=(500.0, 3) max=None
+  case 2    id=30   float    Symmetry                     def=100.0      min=(100.0, 3) max=None
+  case 2    id=31   float    Fan Ends                     def=-100.0     min=(1000.0, 3) max=None
+  case 2    id=70   float    Fan Feathering               def=50.0       min=(100.0, 3) max=None
+  case 2    id=32   float    Replicator Copies            def=1.0        min=(50.0, 1) max=None
+  case 2    id=33   float    Replicator Angle             def=180.0      min=(360.0, 4) max=None
+  case 2    id=34   float    Scale Random                 def=0          min=(100.0, 3) max=None
+  case 2    id=65   float    Spacing Random               def=0          min=(500.0, 3) max=None
+  case 2    id=18   float    Random Seed                  def=None       min=None     max=None
+  case 2    id=22   bool?    Ignore Global Rotation       def=None       min=? max=None
+  case 15   id=5    float    Rotation                     def=0          min=(0, 2)   max=None
+  case 15   id=41   enum     Auto Rotate                  def=0          min=None     max=None
+  case 15   id=35   float    Color Random                 def=25.0       min=(100.0, 3) max=None
+  case 15   id=24   divider  Multi Iris Controls          def=None       min=None     max=None
+  case 15   id=13   float    Spread                       def=100.0      min=(500.0, 3) max=None
+  case 15   id=61   float    Spread Random                def=20.0       min=(200.0, 3) max=None
+  case 15   id=14   float    Number of Objects            def=25.0       min=(250.0, 1) max=None
+  case 15   id=15   float    Scale Random                 def=82.5       min=(100.0, 3) max=None
+  case 15   id=16   float    Brightness Random            def=25.0       min=(100.0, 3) max=None
+  case 15   id=47   float    Rotation Random              def=0          min=(100.0, 3) max=None
+  case 15   id=48   float    Offset Random                def=0          min=(0, 0)   max=None
+  case 15   id=18   float    Random Seed                  def=5000.0     min=None     max=None
+  case 15   id=24   divider  Object Shape                 def=None       min=None     max=None
+  case 15   id=11   enum     Shape Type                   def=0          min=Polygon|Circle|Texture max=None
+  case 15   id=19   texture  Texture Image                def=None       min=? max=None
+  case 15   id=87   float    Shape Orientation            def=45.0       min=(0, 2)   max=None
+  case 15   id=113  float    Orientation Random           def=0          min=(100.0, 3) max=None
+  case 15   id=12   float    Polygon Sides                def=6.0        min=(16.0, 1) max=None
+  case 15   id=42   float    Polygon Roundness            def=20.0       min=(100.0, 3) max=None
+  case 15   id=43   float    Blade Notching               def=0.0        min=(100.0, 3) max=None
+  case 15   id=17   float    Smoothness                   def=0          min=(100.0, 3) max=None
+  case 15   id=25   float    Smoothness Random            def=50.0       min=(100.0, 3) max=None
+  case 15   id=46   float    Outline Intensity            def=0.0        min=(500.0, 3) max=None
+  case 15   id=44   float    Outline Thickness            def=10.0       min=(100.0, 3) max=None
+  case 15   id=45   float    Outline Feathering           def=25.0       min=(100.0, 3) max=None
+  case 15   id=24   divider  Circular Completion          def=None       min=None     max=None
+  case 15   id=49   float    Completion                   def=360.0      min=(360.0, 4) max=None
+  case 15   id=50   float    Completion Feathering        def=0          min=(100.0, 3) max=None
+  case 15   id=60   float    Completion Rotation          def=0          min=(0, 2)   max=None
+  case 15   id=62   float    Rotation Random              def=0          min=(100.0, 3) max=None
+  case 15   id=59   enum     Auto Rotate Completion       def=1          min=None|Object Rotation|To Light|To Center max=None
+  case 5    id=5    float    Rotation                     def=0          min=(0, 2)   max=None
+  case 5    id=41   enum     Auto Rotate                  def=0          min=None|To Light|To Center max=None
+  case 5    id=24   divider  Shimmer Controls             def=None       min=? max=None
+  case 5    id=52   float    Complexity                   def=65.0       min=5.0      max=250.0
+  case 5    id=53   float    Detail                       def=100.0      min=0        max=100.0
+  case 5    id=87   float    Shape Orientation            def=0          min=0        max=0
+  case 5    id=18   float    Random Seed                  def=5000.0     min=0        max=100000.0
+  case 5    id=24   divider  Circular Completion          def=None       min=None     max=None
+  case 5    id=50   float    Completion Feathering        def=0          min=0        max=100.0
+  case 6    id=5    float    Rotation                     def=0          min=0        max=0
+  case 6    id=24   divider  Ring Controls                def=None       min=None     max=None
+  case 6    id=56   float    Thickness                    def=30.0       min=0        max=100.0
+  case 6    id=57   float    Inside Feathering            def=25.0       min=0        max=100.0
+  case 6    id=58   float    Outside Feathering           def=25.0       min=0        max=100.0
+  case 6    id=24   divider  Circular Completion          def=None       min=None     max=None
+  case 6    id=50   float    Completion Feathering        def=0          min=0        max=100.0
+  case 6    id=60   float    Completion Rotation          def=0          min=0        max=0
+  case 6    id=93   float    Convex Roundness             def=0          min=0        max=100.0
+  case 7    id=24   divider  Hoop Controls                def=None       min=None     max=None
+  case 7    id=52   float    Complexity                   def=300.0      min=50.0     max=1000.0
+  case 7    id=53   float    Detail                       def=25.0       min=0        max=100.0
+  case 7    id=67   float    Length                       def=135.0      min=0        max=500.0
+  case 7    id=105  float    Line Thickness               def=40.0       min=0        max=500.0
+  case 7    id=120  float    Line Spacing                 def=10.0       min=0        max=100.0
+  case 7    id=18   float    Random Seed                  def=5000.0     min=0        max=100000.0
+  case 7    id=24   divider  Circular Completion          def=None       min=None     max=None
+  case 7    id=49   float    Completion                   def=130.0      min=0        max=360.0
+  case 7    id=50   float    Completion Feathering        def=100.0      min=0        max=100.0
+  case 7    id=60   float    Completion Rotation          def=0          min=0        max=0
+  case 8    id=5    float    Rotation                     def=0          min=0        max=0
+  case 8    id=24   divider  Glint Controls               def=None       min=None     max=None
+  case 8    id=52   float    Complexity                   def=100.0      min=5.0      max=500.0
+  case 8    id=69   float    Length                       def=250.0      min=0        max=500.0
+  case 8    id=94   float    Length Random                def=50.0       min=0        max=100.0
+  case 8    id=67   float    Thickness                    def=60.0       min=1.0      max=500.0
+  case 8    id=65   float    Spacing Random               def=30.0       min=0        max=100.0
+  case 8    id=87   float    Shape Orientation            def=0          min=0        max=0
+  case 8    id=18   float    Random Seed                  def=5000.0     min=0        max=100000.0
+  case 8    id=24   divider  Circular Completion          def=None       min=None     max=None
+  case 8    id=50   float    Completion Feathering        def=0          min=0        max=100.0
+  case 9    id=5    float    Rotation                     def=0          min=0        max=0
+  case 9    id=24   divider  Sparkle Controls             def=None       min=None     max=None
+  case 9    id=52   float    Complexity                   def=150.0      min=3.0      max=250.0
+  case 9    id=69   float    Length                       def=120.0      min=0        max=500.0
+  case 9    id=94   float    Length Random                def=80.0       min=0        max=100.0
+  case 9    id=67   float    Thickness                    def=50.0       min=1.0      max=500.0
+  case 9    id=111  float    Thickness Random             def=20.0       min=0        max=100.0
+  case 9    id=16   float    Brightness Random            def=20.0       min=0        max=100.0
+  case 9    id=13   float    Spread                       def=100.0      min=0        max=500.0
+  case 9    id=95   float    Spread Random                def=50.0       min=0        max=100.0
+  case 9    id=65   float    Spacing Random               def=50.0       min=0        max=100.0
+  case 9    id=87   float    Shape Orientation            def=0          min=0        max=0
+  case 9    id=18   float    Random Seed                  def=5000.0     min=0        max=100000.0
+  case 9    id=24   divider  Circular Completion          def=None       min=None     max=None
+  case 9    id=50   float    Completion Feathering        def=0          min=0        max=100.0
+  case 9    id=60   float    Completion Rotation          def=0          min=0        max=0
+  case 11   id=5    float    Rotation                     def=0          min=0        max=0
+  case 11   id=24   divider  Spike Ball Controls          def=None       min=None     max=None
+  case 11   id=52   float    Complexity                   def=20.0       min=1.0      max=100.0
+  case 11   id=69   float    Length                       def=100.0      min=0        max=500.0
+  case 11   id=94   float    Length Random                def=50.0       min=0        max=100.0
+  case 11   id=67   float    Thickness                    def=110.0      min=1.0      max=500.0
+  case 11   id=111  float    Thickness Random             def=50.0       min=0        max=100.0
+  case 11   id=16   float    Brightness Random            def=80.0       min=0        max=100.0
+  case 11   id=65   float    Spacing Random               def=15.0       min=0        max=100.0
+  case 11   id=87   float    Shape Orientation            def=0          min=0        max=0
+  case 12   id=24   divider  Caustic Controls             def=None       min=None     max=None
+  case 12   id=118  float    Ring Brightness              def=100.0      min=0        max=500.0
+  case 12   id=119  float    Ring Outline                 def=5.0        min=0        max=100.0
+  case 12   id=114  float    Core Brightness              def=100.0      min=0        max=500.0
+  case 12   id=116  float    Core Roundness               def=30.0       min=0        max=100.0
+  case 12   id=117  float    Core Distortion              def=100.0      min=0        max=100.0
+  case 14   id=5    float    Rotation                     def=0          min=0        max=0
+  case 14   id=35   float    Color Random                 def=0          min=0        max=100.0
+  case 14   id=24   divider  Lens Orbs Controls           def=None       min=None     max=None
+  case 14   id=14   float    Number of Objects            def=60.0       min=1.0      max=1000.0
+  case 14   id=63   float    Illumination Radius          def=50.0       min=0        max=1000.0
+  case 14   id=15   float    Scale Random                 def=50.0       min=0        max=100.0
+  case 14   id=16   float    Brightness Random            def=50.0       min=0        max=100.0
+  case 14   id=47   float    Rotation Random              def=0          min=0        max=100.0
+  case 14   id=18   float    Random Seed                  def=5000.0     min=0        max=100000.0
+  case 14   id=24   divider  Object Shape                 def=None       min=None     max=None
+  case 14   id=87   float    Shape Orientation            def=0          min=0        max=0
+  case 14   id=12   float    Polygon Sides                def=5.0        min=3.0      max=16.0
+  case 14   id=42   float    Polygon Roundness            def=20.0       min=0        max=100.0
+  case 14   id=43   float    Blade Notching               def=0          min=-100.0   max=100.0
+  case 14   id=17   float    Smoothness                   def=5.0        min=0        max=100.0
+  case 14   id=25   float    Smoothness Random            def=100.0      min=0        max=100.0
+  case 14   id=46   float    Outline Intensity            def=0          min=-500.0   max=500.0
+  case 14   id=44   float    Outline Thickness            def=10.0       min=0        max=100.0
+  case 14   id=45   float    Outline Feathering           def=25.0       min=0        max=100.0
+  case 14   id=24   divider  Circular Completion          def=None       min=None     max=None
+  case 14   id=50   float    Completion Feathering        def=0          min=0        max=100.0
+  case 14   id=60   float    Completion Rotation          def=0          min=0        max=0
+  case 14   id=62   float    Rotation Random              def=0          min=0        max=100.0
