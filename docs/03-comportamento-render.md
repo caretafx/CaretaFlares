@@ -21,7 +21,7 @@ rótulo com espaço). `F` = flare (estado global do preset), `op` = membro do n�
 | 5 | XY | `PositionXY` | Position XY | posição da luz principal, em pixels |
 | 6 | XY | `CenterPosition` | Center Position | centro do flare (eixo dos fantasmas); STARTLINE; padrão 320,240 |
 | 7 | Button | `Init Center` | Init Center | define Center Position = metade do formato |
-| 8 | Enum | `SourceType` | Source Type | 2D, 3D, Track Lights, Mask, Luminance |
+| 8 | Enum | `SourceType` | Source Type | 2D, 3D (o menu do nó só tem essas duas; os outros rótulos existem na tabela de textos mas não são usados) |
 | 9 | Grupo fechado | `Additional2DFlares` | Additional 2D Flares | |
 | 10 | Int | `Count` | Count | 0..16 luzes extras |
 | 11 | Float | `Brightness0` / `Scale0` | Brightness 0 / Scale 0 | da luz principal |
@@ -46,7 +46,7 @@ rótulo com espaço). `F` = flare (estado global do preset), `op` = membro do n�
 | 30 | Int | `RandomSeed` | Random Seed | |
 | 31 | Float | `AspectRatio` | Aspect Ratio | padrão 1 |
 | 32 | Enum | `RenderMode` | Render Mode | On Black, On Transparent, Over Original (padrão) |
-| 33 | Enum | `Colorspace` | Colorspace | linear, sRGB, Custom Gamma |
+| 33 | Enum | `Colorspace` | Colorspace | linear, Custom Gamma |
 | 34 | Float | `CustomGamma` | Custom Gamma | padrão 0,4545 |
 | 35 | Bool | `GPU` | GPU | padrão ligado |
 | 36 | Custom | `renderOptions` | — | INVISIBLE, ALWAYS_SAVE; estado do flare (doc 02 §6) |
@@ -75,7 +75,7 @@ animação estão ativos; o estado do flare já entra pelo knob `renderOptions`.
    gamma. `base` é o background quando Render Mode = Over Original, senão 0. Depois, se
    `ShowForeground` e há matte, faz `saída = f·matte + (1−f)·saída`, onde `f` = fator fixo
    (padrão 1) multiplicado pelo alfa da matte quando pedido.
-   - `gamma` = 0,4545 nos modos linear/sRGB, ou `CustomGamma`. Ou seja: o flare é produzido em
+   - `gamma` = 0,4545 no modo linear, ou `CustomGamma` no modo Custom Gamma. Ou seja: o flare é produzido em
      espaço de display e **linearizado com expoente 2,2** antes de somar ao fundo linear. Esse é
      um detalhe importante para igualar a aparência.
 4. Sem licença válida o original salpica ruído aleatório em 10% dos pixels; o plugin novo não tem
@@ -119,11 +119,12 @@ compressão por pixel (aproximadamente `0,6·f(2x+1)`, ver "não verificado").
 
 Função compartilhada por todos os tipos. Produz, a partir dos parâmetros do objeto (ids do doc 02):
 
-- **Posição no eixo**: `distância` (id 2, %) percorre do centro (0) à luz (1); valores >1 passam
-  da luz, <0 passam do centro. Translation (id 6): *Free* = ao longo do eixo; *Horizontal* = só o X
+- **Posição no eixo**: `distância` (id 2, %) percorre da luz (0) ao centro (1); valores >1 passam
+  do centro, <0 ficam atrás da luz. Translation (id 6): *Free* = ao longo do eixo; *Horizontal* = só o X
   acompanha a luz; *Vertical* = só o Y; *None* = fica na luz; *Custom* = pesos de Custom
   Translation (id 23). Depois soma Offset (id 3, % da tela) multiplicado pelo "scale offset"
-  global. Isto é `pos = centro + (luz − centro)·d + offset`.
+  global. Isto é `pos = luz + (centro − luz)·d.x + offset`; nos modos que não são Free soma-se ainda
+  `(centro − luz)·d.y` (segundo componente da distância).
 - **Escala** = Scale global × Scale do objeto (id 1) × Stretch (id 85, xy) × (fator de escala
   por luz). `Ignore Global Scale` (id 27) e `Ignore 3D Perspective` (id 10) zeram os fatores
   correspondentes.
@@ -165,7 +166,7 @@ no pixel (blend aditivo), RGBA.
 **Espectro/gradiente por pixel.** Com Color Source = Gradient: `t = u·loops + offset`, cor =
 mistura de Color 1 e Color 2 por `0,5 + 0,5·sin(2π·t)` (invertido se Reverse). Com Spectrum:
 `t = frac(u·loops + offset)` e as três componentes são parábolas deslocadas de um terço:
-`R = 1 − (6·frac(t−0,3) − 1)²`, `G = 1 − (6·t − 1)²`, `B = 1 − (6·frac(t+0,3) − 1)²`, cada uma
+`R = 1 − (2,5·frac(t−0,3) − 1)²`, `G = 1 − (2,5·t − 1)²`, `B = 1 − (2,5·frac(t+0,3) − 1)²`, cada uma
 limitada em `[0, 1]`, onde `u` é a coordenada do elemento (raio para glow/círculo/iris, posição
 ao longo do raio para streak e sparkle, ângulo para hoop).
 

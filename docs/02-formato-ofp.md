@@ -150,7 +150,7 @@ Consequências para o plugin novo: basta implementar um knob de string com esse 
 mesmo formato, para que scripts antigos reabram com o flare inteiro, inclusive flares editados
 que nunca foram salvos como `.ofp`. O preset padrão (quando o knob está vazio) é um flare
 embutido no DLL com 27 objetos (6 Glow, 6 Iris, 9 Multi Iris, 3 Ring, 1 Shimmer, 2 Streak), todos
-desligados; o plugin novo pode usar qualquer `.ofp` da instalação como padrão.
+ligados (flag 3 = 0); o plugin novo pode usar qualquer `.ofp` da instalação como padrão.
 
 ## 7. Texturas
 
