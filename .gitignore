@@ -15,3 +15,5 @@ Optical Flares Presets/
 Optical Flares Textures/
 tmp/
 dist/
+__pycache__/
+*.pyc
