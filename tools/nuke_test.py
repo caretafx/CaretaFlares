@@ -5,44 +5,91 @@ nem nenhum script com ele foi aberto) e rode no Script Editor:
 
     exec(open(r'E:/Careta/OpticalFlaresNDK/tools/nuke_test.py').read())
 
-O Nuke procura o plugin pelo nome "OpticalFlares" no plugin path, e o seu
-~/.nuke/init.py coloca nele a pasta do plugin antigo (que nao carrega no 15/17).
-Este script poe a pasta do build novo NA FRENTE do plugin path, so nesta
-sessao, carrega o plugin e mostra de qual arquivo ele veio. Depois cria um no
-com o preset "Hot Glow".
+O Nuke procura plugins pelo nome no plugin path, e la esta a pasta do plugin
+antigo (que nao carrega no 15/17). Para nao depender dessa busca, este script
+carrega o DLL novo direto pelo caminho completo com o carregador do Windows; o
+DLL registra o no "OpticalFlares" ao carregar. Cada passo vai para
+E:/Careta/OpticalFlaresNDK/build/nuke_test.log.
 """
+import ctypes
 import os
+import traceback
+from ctypes import wintypes
 
 import nuke
 
+_OF_ROOT = 'E:/Careta/OpticalFlaresNDK'
+_OF_LOG = _OF_ROOT + '/build/nuke_test.log'
 _OF_BUILDS = {(15, 2): 'Nuke15.2v9', (17, 0): 'Nuke17.0v2'}
-_of_key = (nuke.NUKE_VERSION_MAJOR, nuke.NUKE_VERSION_MINOR)
-if _of_key not in _OF_BUILDS:
-    raise RuntimeError('Sem build do OpticalFlaresNDK para Nuke %s' % nuke.NUKE_VERSION_STRING)
 
-_of_dir = 'E:/Careta/OpticalFlaresNDK/build/' + _OF_BUILDS[_of_key]
-nuke.pluginAddPath(_of_dir)
-print('plugin path (inicio): %s' % nuke.pluginPath()[:3])
+
+def _of_log(msg):
+    with open(_OF_LOG, 'a', encoding='utf-8', errors='replace') as fh:
+        fh.write(msg + '\n')
+    print(msg)
+
+
+def _of_run():
+    open(_OF_LOG, 'w').close()
+    _of_log('Nuke %s' % nuke.NUKE_VERSION_STRING)
+    key = (nuke.NUKE_VERSION_MAJOR, nuke.NUKE_VERSION_MINOR)
+    if key not in _OF_BUILDS:
+        _of_log('sem build para esta versao')
+        return
+    dll = _OF_ROOT + '/build/' + _OF_BUILDS[key] + '/OpticalFlares.dll'
+    _of_log('dll: %s (existe=%s)' % (dll, os.path.isfile(dll)))
+    _of_log('plugin path: %s' % nuke.pluginPath())
+    try:
+        _of_log('ja carregados: %s' % nuke.plugins(nuke.ALL, 'OpticalFlares*'))
+    except Exception as exc:
+        _of_log('nuke.plugins falhou: %r' % (exc,))
+
+    # 1) carrega o DLL novo pelo caminho completo
+    k32 = ctypes.WinDLL('kernel32', use_last_error=True)
+    k32.LoadLibraryExW.restype = wintypes.HMODULE
+    k32.LoadLibraryExW.argtypes = [wintypes.LPCWSTR, wintypes.HANDLE, wintypes.DWORD]
+    LOAD_WITH_ALTERED_SEARCH_PATH = 0x8
+    handle = k32.LoadLibraryExW(dll.replace('/', '\\'), None, LOAD_WITH_ALTERED_SEARCH_PATH)
+    if not handle:
+        _of_log('LoadLibrary FALHOU, erro Windows %d' % ctypes.get_last_error())
+        return
+    _of_log('LoadLibrary ok')
+
+    # 2) cria o no
+    try:
+        node = nuke.createNode('OpticalFlares')
+    except Exception as exc:
+        _of_log('createNode falhou: %r' % (exc,))
+        _of_log(traceback.format_exc())
+        return
+    _of_log('no criado: %s (classe %s)' % (node.name(), node.Class()))
+    _of_log('knobs: %d, tem renderOptions=%s, tem ofpPresetFile=%s' % (
+        len(node.knobs()), 'renderOptions' in node.knobs(), 'ofpPresetFile' in node.knobs()))
+
+    # 3) posicao, centro e preset
+    fmt = node.format()
+    node['PositionXY'].setValue([fmt.width() * 0.3, fmt.height() * 0.6])
+    node['CenterPosition'].setValue([fmt.width() * 0.5, fmt.height() * 0.5])
+    presets = os.environ.get(
+        'OPTICAL_FLARES_PRESET_PATH',
+        os.path.expanduser('~/.nuke/OpticalFlares/Optical Flares Presets'),
+    ).replace('\\', '/')
+    preset = presets + '/Custom Objects/Hot Glow.ofp'
+    _of_log('preset: %s (existe=%s)' % (preset, os.path.isfile(preset)))
+    node['ofpPresetFile'].setValue(preset)
+    _of_log('renderOptions: %d caracteres' % len(node['renderOptions'].value()))
+
+    # 4) amostra um pixel no centro do glow (forca um render pequeno)
+    try:
+        x, y = fmt.width() * 0.3, fmt.height() * 0.6
+        rgb = [node.sample(c, x, y) for c in ('rgba.red', 'rgba.green', 'rgba.blue')]
+        _of_log('pixel no glow: %s' % rgb)
+    except Exception as exc:
+        _of_log('sample falhou: %r' % (exc,))
+    _of_log('FIM OK')
+
 
 try:
-    nuke.load('OpticalFlares')
-except Exception as exc:  # a mensagem do Windows pode vir com acento quebrado
-    print('nuke.load falhou: %r' % (exc,))
-    raise
-
-for _of_p in nuke.plugins(nuke.ALL | nuke.NODIR, 'OpticalFlares*'):
-    print('carregado: ' + _of_p)
-for _of_p in nuke.plugins(nuke.ALL, 'OpticalFlares*'):
-    print('arquivo:   ' + _of_p)
-
-_of_presets = os.environ.get(
-    'OPTICAL_FLARES_PRESET_PATH',
-    os.path.expanduser('~/.nuke/OpticalFlares/Optical Flares Presets'),
-).replace('\\', '/')
-
-_of_node = nuke.createNode('OpticalFlares')
-_of_fmt = _of_node.format()
-_of_node['PositionXY'].setValue([_of_fmt.width() * 0.3, _of_fmt.height() * 0.6])
-_of_node['CenterPosition'].setValue([_of_fmt.width() * 0.5, _of_fmt.height() * 0.5])
-_of_node['ofpPresetFile'].setValue(_of_presets + '/Custom Objects/Hot Glow.ofp')
-print('renderOptions: %d caracteres' % len(_of_node['renderOptions'].value()))
+    _of_run()
+except Exception:
+    _of_log('ERRO:\n' + traceback.format_exc())
