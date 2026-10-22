@@ -139,6 +139,10 @@ QPushButton#crumb { background: qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #4a4
 QLabel#crumbSep { color: #cfcfcf; background: transparent; }
 QListWidget#blist { background: #262626; border: none; }
 QSplitter::handle { background: #1a1a1a; }
+QSlider::groove:horizontal { height: 4px; background: #151515; border: 1px solid #0a0a0a; }
+QSlider::sub-page:horizontal { background: #2a6fb0; }
+QSlider::handle:horizontal { width: 10px; margin: -5px 0; border-radius: 5px; border: 1px solid #111;
+                             background: qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #8a8a8a, stop:1 #555); }
 """
 
 
@@ -168,6 +172,11 @@ def _lens_icon(size=22, color=QtGui.QColor(230, 230, 230)):
     p.drawEllipse(QtCore.QPointF(size * 0.42, size * 0.5), size * 0.1, size * 0.1)
     p.end()
     return QtGui.QIcon(pm)
+
+
+def _settings():
+    """Preferencias da janela (tamanho das miniaturas etc.), por usuario."""
+    return QtCore.QSettings('OpticalFlaresNDK', 'Options')
 
 
 def _arrow_style():
@@ -272,6 +281,8 @@ class RenderWorker(QtCore.QObject):
                 img = fn()
                 if img is not None:
                     self.ready.emit(key, img)
+            except RuntimeError:
+                return  # janela ja fechada
             except Exception as exc:
                 print('OpticalFlares Options: %s' % exc)
 
@@ -426,8 +437,9 @@ class ThumbDelegate(QtWidgets.QStyledItemDelegate):
         font.setBold(True)
         p.setFont(font)
         p.setPen(QtGui.QColor(240, 240, 240))
-        p.drawText(QtCore.QRect(x, y + h + 3, w, 18), QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter,
-                   index.data(QtCore.Qt.DisplayRole))
+        text = QtGui.QFontMetrics(font).elidedText(index.data(QtCore.Qt.DisplayRole) or '',
+                                                   QtCore.Qt.ElideRight, w)
+        p.drawText(QtCore.QRect(x, y + h + 3, w, 18), QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter, text)
 
 
 # =================================================================== janela
@@ -437,7 +449,7 @@ class OptionsWindow(QtWidgets.QDialog):
         self.setObjectName('ofOptions')
         self.setWindowTitle('Optical Flares Options')
         self.setStyleSheet(STYLE + _arrow_style())
-        self.resize(1280, 860)
+        self.resize(1240, 900)
         self.node_name = node.fullName() if node is not None else None
         self.renderer = Renderer()
         self.worker = RenderWorker(self.renderer)
@@ -453,7 +465,11 @@ class OptionsWindow(QtWidgets.QDialog):
         self.center = [0.5, 0.5]
         self.pv_bright, self.pv_scale = 100.0, 100.0
         self.stack_rows = []
-        self.thumb_size = (220, 124)
+        self._editor_values = {}
+        self._interactive = False
+        tw = int(_settings().value('thumbWidth', 180) or 180)
+        tw = max(70, min(420, tw))
+        self.thumb_size = (tw, int(round(tw * 9 / 16.0)))
         self.browse_rel = ''
         self.mode = 'browser'
         self.obj_mode = 'basic'
@@ -481,26 +497,31 @@ class OptionsWindow(QtWidgets.QDialog):
         body = QtWidgets.QWidget()
         bl = QtWidgets.QHBoxLayout(body)
         bl.setContentsMargins(6, 6, 6, 6)
+        # 2x2 como no original: Preview/Stack a esquerda, Editor/Browser a direita
         self.hsplit = QtWidgets.QSplitter(QtCore.Qt.Horizontal)
         self.hsplit.setHandleWidth(6)
         self.vsplit = QtWidgets.QSplitter(QtCore.Qt.Vertical)
         self.vsplit.setHandleWidth(6)
+        self.vsplit_r = QtWidgets.QSplitter(QtCore.Qt.Vertical)
+        self.vsplit_r.setHandleWidth(6)
         self.preview_panel = self._build_preview()
         self.stack_panel = self._build_stack()
         self.vsplit.addWidget(self.preview_panel)
         self.vsplit.addWidget(self.stack_panel)
         self.editor_panel = self._build_editor()
         self.browser_panel = self._build_browser()
+        self.vsplit_r.addWidget(self.editor_panel)
+        self.vsplit_r.addWidget(self.browser_panel)
         self.hsplit.addWidget(self.vsplit)
-        self.hsplit.addWidget(self.editor_panel)
-        self.hsplit.addWidget(self.browser_panel)
+        self.hsplit.addWidget(self.vsplit_r)
         bl.addWidget(self.hsplit)
         root.addWidget(body, 1)
         self._reset_panels()
 
     def _reset_panels(self):
-        self.hsplit.setSizes([520, 420, 300])
-        self.vsplit.setSizes([380, 420])
+        self.hsplit.setSizes([620, 620])
+        self.vsplit.setSizes([400, 400])
+        self.vsplit_r.setSizes([400, 400])
         for b in self.panel_buttons.values():
             b.setChecked(True)
 
@@ -605,13 +626,13 @@ class OptionsWindow(QtWidgets.QDialog):
         grid.setHorizontalSpacing(10)
         grid.setVerticalSpacing(3)
         self.pv_b = ScrubValue(100, '%', 1.0)
-        self.pv_b.changed.connect(lambda v, f: self._set_pv('b', v))
+        self.pv_b.changed.connect(lambda v, f: self._set_pv('b', v, f))
         self.pv_s = ScrubValue(100, '%', 1.0)
-        self.pv_s.changed.connect(lambda v, f: self._set_pv('s', v))
+        self.pv_s.changed.connect(lambda v, f: self._set_pv('s', v, f))
         self.pv_x = ScrubValue(DEFAULT_PREVIEW_POS[0], '', 0.2)
-        self.pv_x.changed.connect(lambda v, f: self._set_pv('x', v))
+        self.pv_x.changed.connect(lambda v, f: self._set_pv('x', v, f))
         self.pv_y = ScrubValue(DEFAULT_PREVIEW_POS[1], '', 0.2)
-        self.pv_y.changed.connect(lambda v, f: self._set_pv('y', v))
+        self.pv_y.changed.connect(lambda v, f: self._set_pv('y', v, f))
         self.guides = QtWidgets.QCheckBox('Guides')
         self.guides.toggled.connect(lambda _on: self._schedule_preview())
         self.show_bg = QtWidgets.QCheckBox('Show BG')
@@ -636,7 +657,7 @@ class OptionsWindow(QtWidgets.QDialog):
         lay.addWidget(bar)
         return frame
 
-    def _set_pv(self, what, v):
+    def _set_pv(self, what, v, final=True):
         if what == 'b':
             self.pv_bright = v
         elif what == 's':
@@ -645,7 +666,7 @@ class OptionsWindow(QtWidgets.QDialog):
             self.light[0] = v / 100.0
         elif what == 'y':
             self.light[1] = 1 - v / 100.0
-        self._schedule_preview()
+        self._schedule_preview(interactive=not final)
 
     def eventFilter(self, obj, ev):
         if obj is self.preview:
@@ -659,26 +680,37 @@ class OptionsWindow(QtWidgets.QDialog):
                 self.light = [min(1.5, max(-0.5, x)), min(1.5, max(-0.5, 1 - y))]
                 self.pv_x.set_value(x * 100)
                 self.pv_y.set_value(y * 100)
+                self._schedule_preview(interactive=True)
+                return True
+            if t == QtCore.QEvent.MouseButtonRelease:
                 self._schedule_preview()
                 return True
             if t == QtCore.QEvent.Resize:
                 self._schedule_preview()
         return super(OptionsWindow, self).eventFilter(obj, ev)
 
-    def _schedule_preview(self):
-        self._preview_timer.start()
+    def _schedule_preview(self, interactive=False):
+        # arrastando: meia resolucao (o dobro de quadros); ao soltar, resolucao cheia
+        self._interactive = interactive
+        self._preview_timer.start(0 if interactive else 15)
 
     def _request_preview(self):
         # o preview ocupa o painel inteiro (sem tarjas), como no original
-        w = max(64, self.preview.width())
-        h = max(36, self.preview.height())
+        div = 2 if getattr(self, '_interactive', False) else 1
+        w = max(64, self.preview.width() // div)
+        h = max(36, self.preview.height() // div)
         data = ofp.serialize(self.preset)
         light, center = list(self.light), list(self.center)
         b, s = self.pv_bright / 100.0, self.pv_scale / 100.0
 
         def job():
             raw = self.renderer.render_mem(data, w, h, light, center, -1, b, s)
-            return _image(raw, w, h) if raw else None
+            if not raw:
+                return None
+            img = _image(raw, w, h)
+            if div > 1:
+                img = img.scaled(w * div, h * div, QtCore.Qt.IgnoreAspectRatio, QtCore.Qt.FastTransformation)
+            return img
 
         self.worker.set_preview(('preview', job))
 
@@ -833,14 +865,23 @@ class OptionsWindow(QtWidgets.QDialog):
         self.global_band.style().unpolish(self.global_band)
         self.global_band.style().polish(self.global_band)
 
-    def _request_stack_thumbs(self):
-        """Miniaturas por objeto: renderiza 3x maior e reduz (objetos pequenos nao somem)."""
-        self.worker.clear_queue('stack:')
-        base = self.preset.clone()
-        for o in base.objects:
-            o.hidden = False
-            o.solo = False
-        data = ofp.serialize(base)
+    def _request_stack_thumbs(self, only=None):
+        """Miniaturas por objeto: renderiza 3x maior e reduz (objetos pequenos nao somem).
+        only = indice do objeto que mudou (refaz so ele e a do Global); None = todas."""
+        if only is None:
+            self.worker.clear_queue('stack:')
+        else:
+            self.worker.clear_queue('stack:global')
+        # miniatura mostra o objeto mesmo se estiver HIDE/SOLO: grava sem esses flags
+        # (sem copiar o preset inteiro, que custava ~20 ms)
+        flags = [(o.hidden, o.solo) for o in self.preset.objects]
+        for o in self.preset.objects:
+            o.hidden = o.solo = False
+        try:
+            data = ofp.serialize(self.preset)
+        finally:
+            for o, (h, so) in zip(self.preset.objects, flags):
+                o.hidden, o.solo = h, so
         light, center = list(self.light), list(self.center)
         W, H = 216, 123
 
@@ -848,7 +889,8 @@ class OptionsWindow(QtWidgets.QDialog):
             img = _image(raw, W, H)
             return img.scaled(72, 41, QtCore.Qt.IgnoreAspectRatio, QtCore.Qt.SmoothTransformation)
 
-        for i in range(len(self.preset.objects)):
+        targets = range(len(self.preset.objects)) if only is None or only < 0 else [only]
+        for i in targets:
             def job(i=i):
                 raw = self.renderer.render_mem(data, W, H, light, center, i, 1.0, 1.0)
                 return small(raw) if raw else None
@@ -902,6 +944,7 @@ class OptionsWindow(QtWidgets.QDialog):
                 cur.append(p)
         sections.append(cur)
         tname = target.type_name if not is_global else ''
+        self._editor_values = {}
         for sec in sections:
             if not sec:
                 continue
@@ -927,6 +970,7 @@ class OptionsWindow(QtWidgets.QDialog):
         if p.type == ofp.FLOAT:
             w = ScrubValue(p.f(), unit, step, integer)
             w.changed.connect(lambda v, f, p=p: self._edit(lambda: p.set_f(v), f))
+            self._editor_values[p.id] = w
             hl.addWidget(w)
         elif p.type == ofp.FLOAT2:
             a = ScrubValue(p.f(0), unit, step, integer)
@@ -1007,24 +1051,26 @@ class OptionsWindow(QtWidgets.QDialog):
     # ------------------------------------------------------------------ edicao
     def _edit(self, fn, final):
         fn()
-        self._changed(final, thumbs=final)
+        self._changed(final, thumbs=final, only=self.sel)
 
-    def _changed(self, final, thumbs=True, rebuild=False):
-        self._schedule_preview()
+    def _changed(self, final, thumbs=True, rebuild=False, only=None):
+        self._schedule_preview(interactive=not final)
         if final:
             self._push_undo()
         if rebuild:
             self._rebuild_stack()
         elif thumbs:
-            self._request_stack_thumbs()
+            self._request_stack_thumbs(only)
 
     def _set_obj_float(self, k, pid, v, final):
         p = self.preset.objects[k].find(pid)
         if p is not None:
             p.set_f(v)
             if k == self.sel and final:
-                self._rebuild_editor()
-            self._changed(final, thumbs=final)
+                w = self._editor_values.get(pid)
+                if w is not None:
+                    w.set_value(v)  # atualiza so o valor no Editor, sem reconstruir
+            self._changed(final, thumbs=final, only=k)
 
     def _set_flag(self, k, attr, on):
         setattr(self.preset.objects[k], attr, on)
@@ -1149,8 +1195,8 @@ class OptionsWindow(QtWidgets.QDialog):
         frame, lay = _panel('Browser')
         tabs = QtWidgets.QHBoxLayout()
         tabs.setSpacing(0)
-        self.tab_objects = QtWidgets.QPushButton('  OBJECTS')
-        self.tab_browser = QtWidgets.QPushButton('  BROWSER')
+        self.tab_objects = QtWidgets.QPushButton('  LENS OBJECTS')
+        self.tab_browser = QtWidgets.QPushButton('  PRESET BROWSER')
         icon = _lens_icon(24)
         for b in (self.tab_objects, self.tab_browser):
             b.setIcon(icon)
@@ -1167,36 +1213,66 @@ class OptionsWindow(QtWidgets.QDialog):
         self.crumbs_lay.setSpacing(5)
         lay.addWidget(self.crumbs)
 
+        # grade de miniaturas: quantas couberem por linha, no tamanho escolhido
         self.blist = QtWidgets.QListWidget()
         self.blist.setObjectName('blist')
         self.blist.setItemDelegate(ThumbDelegate(self))
+        self.blist.setViewMode(QtWidgets.QListView.IconMode)
+        self.blist.setFlow(QtWidgets.QListView.LeftToRight)
+        self.blist.setWrapping(True)
+        self.blist.setResizeMode(QtWidgets.QListView.Adjust)
+        self.blist.setMovement(QtWidgets.QListView.Static)
         self.blist.setVerticalScrollMode(QtWidgets.QAbstractItemView.ScrollPerPixel)
         self.blist.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
         self.blist.setUniformItemSizes(True)
         self.blist.itemClicked.connect(self._browser_click)
         self.blist.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
         self.blist.customContextMenuRequested.connect(self._browser_menu)
-        self.blist.viewport().installEventFilter(self._make_resize_watch())
+        self.blist.viewport().installEventFilter(self._make_wheel_zoom())
         lay.addWidget(self.blist, 1)
+
+        # barra de tamanho das miniaturas (tambem Ctrl + roda do mouse na lista)
+        sizebar = QtWidgets.QFrame()
+        sizebar.setObjectName('crumbs')
+        sl = QtWidgets.QHBoxLayout(sizebar)
+        sl.setContentsMargins(8, 3, 8, 4)
+        sl.setSpacing(6)
+        small = _label(u'▪', 'plab')
+        big = _label(u'■', 'plab')
+        self.size_slider = QtWidgets.QSlider(QtCore.Qt.Horizontal)
+        self.size_slider.setRange(70, 420)
+        self.size_slider.setValue(self.thumb_size[0])
+        self.size_slider.setToolTip('Tamanho das miniaturas (Ctrl + roda do mouse na lista)')
+        self.size_slider.valueChanged.connect(self._set_thumb_width)
+        sl.addWidget(_label('Size', 'plab'))
+        sl.addWidget(small)
+        sl.addWidget(self.size_slider, 1)
+        sl.addWidget(big)
+        lay.addWidget(sizebar)
+
         self.browser_items = {}
         self._browser_mode('browser')
         return frame
 
-    def _make_resize_watch(self):
+    def _set_thumb_width(self, w):
+        self.thumb_size = (int(w), int(round(w * 9 / 16.0)))
+        self.blist.doItemsLayout()
+        self.blist.viewport().update()
+        _settings().setValue('thumbWidth', int(w))
+
+    def _make_wheel_zoom(self):
         win = self
 
-        class Watch(QtCore.QObject):
+        class Wheel(QtCore.QObject):
             def eventFilter(self, obj, ev):
-                if ev.type() == QtCore.QEvent.Resize:
-                    # miniatura na largura do painel, em 16:9
-                    w = max(120, obj.width() - 14)
-                    h = int(w * 9 / 16)
-                    if (w, h) != win.thumb_size:
-                        win.thumb_size = (w, h)
-                        win.blist.doItemsLayout()
+                if ev.type() == QtCore.QEvent.Wheel and ev.modifiers() & QtCore.Qt.ControlModifier:
+                    d = ev.angleDelta().y()
+                    if d:
+                        win.size_slider.setValue(win.size_slider.value() + (20 if d > 0 else -20))
+                    return True
                 return False
-        self._watch = Watch(self)
-        return self._watch
+        self._wheel = Wheel(self)
+        return self._wheel
 
     def _browser_mode(self, mode):
         self.mode = mode

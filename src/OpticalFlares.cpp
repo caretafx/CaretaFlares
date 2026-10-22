@@ -8,6 +8,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <ctime>
 #include <direct.h>
 #include <filesystem>
 #include <cstdlib>
@@ -538,19 +539,32 @@ static std::string textureRoot()
 // (tamanho, objetos e tempo), para medir o desempenho dentro do Nuke.
 void OpticalFlares::logRender() const
 {
+    // ligado por padrao (OFNDK_LOG=0 desliga): uma linha por render, para medir a fluidez
+    // dentro do Nuke. O arquivo recomeca quando passa de 512 KB.
     static const bool on = [] {
         const char* v = std::getenv("OFNDK_LOG");
-        return v && *v && *v != '0';
+        return !(v && *v == '0');
     }();
     if (!on) return;
     const char* base = std::getenv("LOCALAPPDATA");
     if (!base) return;
     _mkdir((std::string(base) + "/OpticalFlaresNDK").c_str());
     const std::string path = std::string(base) + "/OpticalFlaresNDK/render.log";
-    if (FILE* fh = std::fopen(path.c_str(), "a")) {
-        std::fprintf(fh, "%s %dx%d luzes=%d objetos=%d %.1f ms\n", node_name().c_str(), flareW_, flareH_,
+    static double lastStamp = 0.0;
+    const double now = std::chrono::duration<double, std::milli>(
+                           std::chrono::steady_clock::now().time_since_epoch()).count();
+    const double gap = lastStamp > 0.0 ? now - lastStamp : 0.0;
+    lastStamp = now;
+    std::error_code ec;
+    const bool big = std::filesystem::file_size(std::filesystem::u8path(path), ec) > 512 * 1024 && !ec;
+    if (FILE* fh = std::fopen(path.c_str(), big ? "w" : "a")) {
+        const std::time_t t = std::time(nullptr);
+        char when[32];
+        std::strftime(when, sizeof(when), "%H:%M:%S", std::localtime(&t));
+        std::fprintf(fh, "%s %s frame=%g %dx%d luzes=%d objetos=%d render=%.1f ms desde_o_anterior=%.0f ms\n",
+                     when, node_name().c_str(), double(outputContext().frame()), flareW_, flareH_,
                      std::max(0, std::min(count_, kMaxExtraLights)) + 1,
-                     preset_ ? int(preset_->objects.size()) : 0, lastRenderMs_);
+                     preset_ ? int(preset_->objects.size()) : 0, lastRenderMs_, gap);
         std::fclose(fh);
     }
 }
