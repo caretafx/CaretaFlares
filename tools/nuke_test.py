@@ -64,9 +64,11 @@ def _of_run():
         return
     _of_log('LoadLibrary ok')
 
-    # 2) cria o no
+    # 2) cria o no solto (sem ligar no que estiver selecionado) e mostra no viewer
+    for sel in nuke.selectedNodes():
+        sel.setSelected(False)
     try:
-        node = nuke.createNode('OpticalFlares')
+        node = nuke.createNode('OpticalFlares', inpanel=True)
     except Exception as exc:
         _of_log('createNode falhou: %r' % (exc,))
         _of_log(traceback.format_exc())
@@ -95,6 +97,10 @@ def _of_run():
         _of_log('pixel no glow: %s' % rgb)
     except Exception as exc:
         _of_log('sample falhou: %r' % (exc,))
+    viewers = nuke.allNodes('Viewer')
+    if viewers:
+        viewers[0].setInput(0, node)
+        _of_log('viewer %s ligado no no' % viewers[0].name())
     _of_log('FIM OK')
 
 
