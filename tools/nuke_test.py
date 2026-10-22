@@ -1,7 +1,7 @@
 """Teste do OpticalFlaresNDK sem alterar o ~/.nuke.
 
 Abra um Nuke 15.2 ou 17.0 NOVO (sessao em que nenhum OpticalFlares foi criado
-nem nenhum script com ele foi aberto) e rode no Script Editor:
+nem nenhum script com ele foi aberto; uma sessao so registra o no uma vez) e rode no Script Editor:
 
     exec(open(r'E:/Careta/OpticalFlaresNDK/tools/nuke_test.py').read())
 
@@ -44,7 +44,16 @@ def _of_run():
     except Exception as exc:
         _of_log('nuke.plugins falhou: %r' % (exc,))
 
-    # 1) carrega o DLL novo pelo caminho completo
+    # 1) carrega uma COPIA do DLL novo pelo caminho completo; assim o arquivo do
+    #    build nao fica travado e da para recompilar com o Nuke aberto
+    import shutil
+    import time
+    run_dir = os.path.dirname(dll) + '/run'
+    os.makedirs(run_dir, exist_ok=True)
+    copy = '%s/OpticalFlares_%d.dll' % (run_dir, int(time.time()))
+    shutil.copy2(dll, copy)
+    _of_log('copia carregada: %s' % copy)
+    dll = copy
     k32 = ctypes.WinDLL('kernel32', use_last_error=True)
     k32.LoadLibraryExW.restype = wintypes.HMODULE
     k32.LoadLibraryExW.argtypes = [wintypes.LPCWSTR, wintypes.HANDLE, wintypes.DWORD]

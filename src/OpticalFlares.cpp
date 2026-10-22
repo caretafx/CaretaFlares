@@ -303,7 +303,8 @@ int OpticalFlares::knob_changed(Knob* k)
         return 1;
     }
     if (k->is("InitCenter")) {
-        const Format& fmt = format_.format() ? *format_.format() : input0().format();
+        validate(false);
+        const Format& fmt = info_.format();
         if (Knob* c = knob("CenterPosition")) {
             c->set_value(fmt.width() * 0.5, 0);
             c->set_value(fmt.height() * 0.5, 1);
@@ -320,8 +321,11 @@ int OpticalFlares::knob_changed(Knob* k)
 
 void OpticalFlares::updateEnabledKnobs()
 {
+    // o valor do knob so chega em count_ no proximo store(); ler do proprio knob
+    int count = count_;
+    if (Knob* c = knob("Count")) count = int(c->get_value());
     for (int i = 0; i < kMaxExtraLights; ++i) {
-        const bool on = i < count_;
+        const bool on = i < count;
         const std::string idx = std::to_string(i + 1);
         for (const std::string& name : {"PositionXY" + idx, "Brightness" + idx, "Scale" + idx})
             if (Knob* kk = knob(name.c_str())) kk->enable(on);
@@ -330,10 +334,14 @@ void OpticalFlares::updateEnabledKnobs()
 
 void OpticalFlares::loadPresetFile()
 {
-    if (!presetFile_ || !*presetFile_) return;
+    // no knob_changed o membro presetFile_ ainda tem o valor antigo; ler do knob
+    Knob* fileKnob = knob("ofpPresetFile");
+    const char* text = fileKnob ? fileKnob->get_text(&outputContext()) : nullptr;
+    const std::string path = text ? text : "";
+    if (path.empty()) return;
     std::vector<uint8_t> bytes;
     std::string err;
-    if (!ofndk::loadOfpFile(presetFile_, bytes, err)) {
+    if (!ofndk::loadOfpFile(path, bytes, err)) {
         critical("Optical Flares: %s", err.c_str());
         return;
     }
