@@ -291,7 +291,8 @@ class PresetBrowser(QtWidgets.QDialog):
         out = []
         if recursive:
             for dp, dirs, files in os.walk(base):
-                dirs.sort()
+                # flares completos primeiro; "Custom Objects" (elementos soltos) por ultimo
+                dirs.sort(key=lambda d: ('custom' in d.lower(), d.lower()))
                 out += [os.path.join(dp, f).replace('\\', '/') for f in sorted(files) if f.lower().endswith('.ofp')]
         elif os.path.isdir(base):
             out = [base + '/' + f for f in sorted(os.listdir(base)) if f.lower().endswith('.ofp')]
@@ -300,8 +301,8 @@ class PresetBrowser(QtWidgets.QDialog):
     def _folder_changed(self):
         sel = self.tree.selectedItems()
         rel = sel[0].data(0, QtCore.Qt.UserRole) if sel else ''
-        # "Todos" = so a raiz (os presets de flare); subpastas mostram tudo dentro delas
-        self._populate(self._presets_in(rel, recursive=bool(rel)))
+        # cada pasta mostra tudo o que tem dentro; "Todos" mostra a instalacao inteira
+        self._populate(self._presets_in(rel, recursive=True))
 
     def _populate(self, paths):
         self.worker.clear()
@@ -323,9 +324,6 @@ class PresetBrowser(QtWidgets.QDialog):
 
     def _filter(self, text):
         text = (text or '').lower().strip()
-        if text and self.tree.selectedItems() and self.tree.selectedItems()[0].data(0, QtCore.Qt.UserRole) == '':
-            # busca em tudo quando esta na raiz
-            pass
         for p, it in self.items.items():
             it.setHidden(bool(text) and text not in os.path.basename(p).lower())
 
