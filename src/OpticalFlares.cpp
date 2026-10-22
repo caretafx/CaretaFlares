@@ -7,7 +7,6 @@
 
 #include <cmath>
 #include <memory>
-#include <mutex>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -18,6 +17,7 @@
 #include "DDImage/Iop.h"
 #include "DDImage/Knobs.h"
 #include "DDImage/Row.h"
+#include "DDImage/Thread.h"
 
 #include "FlareRenderer.h"
 #include "OfpPreset.h"
@@ -157,7 +157,9 @@ private:
     std::string parsedState_;
     bool stateError_ = false;
 
-    std::mutex renderMutex_;
+    // DD::Image::Lock em vez de std::mutex: o Nuke traz a runtime C++ 14.36, e o
+    // std::mutex do MSVC 14.40+ pode falhar nela.
+    Lock renderLock_;
     Hash renderedHash_;
     bool rendered_ = false;
     std::vector<float> flare_;
@@ -401,7 +403,7 @@ void OpticalFlares::_request(int x, int y, int r, int t, ChannelMask channels, i
 
 void OpticalFlares::ensureRendered()
 {
-    std::lock_guard<std::mutex> lock(renderMutex_);
+    Guard guard(renderLock_);
     if (rendered_ && renderedHash_ == hash()) return;
 
     const Format& fmt = info_.format();

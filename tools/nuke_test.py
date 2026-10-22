@@ -1,14 +1,15 @@
 """Teste do OpticalFlaresNDK sem alterar o ~/.nuke.
 
-No Script Editor do Nuke 15.2 ou 17.0, logo depois de abrir o Nuke
-(antes de criar qualquer no OpticalFlares), rode:
+Abra um Nuke 15.2 ou 17.0 NOVO (sessao em que nenhum OpticalFlares foi criado
+nem nenhum script com ele foi aberto) e rode no Script Editor:
 
     exec(open(r'E:/Careta/OpticalFlaresNDK/tools/nuke_test.py').read())
 
-O script carrega o DLL novo pelo caminho completo (assim o DLL antigo em
-~/.nuke/OpticalFlares/plugin nao e usado), cria um no e carrega o preset
-"Hot Glow". Depois disso voce pode abrir scripts antigos com OpticalFlares
-na mesma sessao: o no novo le o estado salvo neles.
+O Nuke procura o plugin pelo nome "OpticalFlares" no plugin path, e o seu
+~/.nuke/init.py coloca nele a pasta do plugin antigo (que nao carrega no 15/17).
+Este script poe a pasta do build novo NA FRENTE do plugin path, so nesta
+sessao, carrega o plugin e mostra de qual arquivo ele veio. Depois cria um no
+com o preset "Hot Glow".
 """
 import os
 
@@ -19,9 +20,20 @@ _of_key = (nuke.NUKE_VERSION_MAJOR, nuke.NUKE_VERSION_MINOR)
 if _of_key not in _OF_BUILDS:
     raise RuntimeError('Sem build do OpticalFlaresNDK para Nuke %s' % nuke.NUKE_VERSION_STRING)
 
-_of_dll = 'E:/Careta/OpticalFlaresNDK/build/%s/OpticalFlares.dll' % _OF_BUILDS[_of_key]
-nuke.load(_of_dll)
-print('OpticalFlaresNDK carregado de ' + _of_dll)
+_of_dir = 'E:/Careta/OpticalFlaresNDK/build/' + _OF_BUILDS[_of_key]
+nuke.pluginAddPath(_of_dir)
+print('plugin path (inicio): %s' % nuke.pluginPath()[:3])
+
+try:
+    nuke.load('OpticalFlares')
+except Exception as exc:  # a mensagem do Windows pode vir com acento quebrado
+    print('nuke.load falhou: %r' % (exc,))
+    raise
+
+for _of_p in nuke.plugins(nuke.ALL | nuke.NODIR, 'OpticalFlares*'):
+    print('carregado: ' + _of_p)
+for _of_p in nuke.plugins(nuke.ALL, 'OpticalFlares*'):
+    print('arquivo:   ' + _of_p)
 
 _of_presets = os.environ.get(
     'OPTICAL_FLARES_PRESET_PATH',
