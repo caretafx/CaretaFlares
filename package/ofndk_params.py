@@ -64,8 +64,10 @@ GLOBAL_ENUMS = {
     36: ['None', 'Box', 'Ellipse'],
     55: ['None', 'Purple Fringe', 'Red/Blue Shift'],
 }
-GLOBAL_SECTIONS = {112: 'Common Settings', 36: 'Matte Box Controls', 19: 'Lens Texture',
-                   55: 'Chromatic Aberration', 0: 'Color Correction'}
+GLOBAL_SECTIONS = {112: 'Common Settings', 8: 'Common Settings', 9: 'Common Settings', 4: 'Common Settings',
+                   18: 'Common Settings', 36: 'Matte Box Controls', 37: 'Matte Box Controls',
+                   19: 'Lens Texture', 63: 'Lens Texture', 55: 'Chromatic Aberration', 51: 'Chromatic Aberration',
+                   0: 'Color Correction', 66: 'Color Correction', 54: 'Color Correction'}
 
 # ---- secoes dos objetos: nome pelo primeiro parametro depois do divisor
 SECTIONS = {0: 'Common Settings', 7: 'Colorize', 106: 'Dynamic Triggering', 39: 'Matte Box Controls',

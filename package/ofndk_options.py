@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """Janela "Optical Flares Options" do plugin novo: Preview, Stack, Editor e Browser,
-no mesmo arranjo da janela do plugin original (docs da Video Copilot para Nuke).
+no mesmo arranjo e visual da janela do plugin original (imagens da documentacao da
+Video Copilot para Nuke). Desenho e codigo proprios.
 
 Abre pelo botao Options do no. Edita uma copia do preset; OK grava no no
 (knob renderOptions, num unico undo), Cancel descarta.
@@ -9,6 +10,7 @@ Fora do Nuke (teste): python ofndk_options.py [--shot SAIDA.png] [PRESET.ofp]
 """
 from __future__ import print_function
 
+import copy
 import ctypes
 import os
 import sys
@@ -29,60 +31,177 @@ import ofndk_params as P
 import ofndk_preset as ofp
 
 QAction = getattr(QtGui, 'QAction', None) or QtWidgets.QAction
-VERSION = 'OpticalFlaresNDK 1.1'
+VERSION = '1.1.0'
+DEFAULT_PREVIEW_POS = (23.6, 27.4)  # % da largura, % da altura a partir do topo (como no original)
 _window = None
 
-
 # =================================================================== estilo
+# Cinzas neutros, Tahoma pequena, valores em azul claro sublinhado, pilulas escuras
+# com borda clara, faixa azul dos Global Parameters.
 STYLE = """
-QWidget { color: #d2d5d8; font-family: Segoe UI, Arial; font-size: 11px; }
-QDialog#ofOptions { background: #141516; }
-QFrame#panel { background: #26282a; border: 1px solid #0c0d0e; }
-QLabel#panelTitle { background: #1b1c1d; color: #c9ccd0; font-weight: bold; padding: 4px 8px;
-                    border-bottom: 1px solid #0c0d0e; }
-QFrame#bar { background: #202224; border-bottom: 1px solid #0c0d0e; }
-QPushButton { background: qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #3c3f42, stop:1 #2a2c2f);
-              border: 1px solid #0f1011; border-radius: 3px; padding: 4px 14px; color: #d8dadc; }
-QPushButton:hover { background: #47494c; }
-QPushButton:checked { background: #1f6fb2; color: white; border-color: #164f80; }
-QPushButton:disabled { color: #6b6e72; }
-QPushButton#pill { border-radius: 9px; padding: 2px 10px; font-size: 10px; font-weight: bold; }
-QPushButton#ok { background: qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #4a4d50, stop:1 #36383b); font-weight: bold; }
-QPushButton#tab { font-size: 12px; font-weight: bold; padding: 8px 16px; border-radius: 0; }
-QPushButton#panelToggle { border-radius: 0; padding: 3px 26px; background: #1b1c1d; }
-QPushButton#panelToggle:checked { background: #2d3033; color: #ffffff; }
-QFrame#globalBand { background: qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #2a7cc4, stop:1 #1a5d97);
-                    border: 1px solid #0c3a62; }
-QLabel#globalTitle { color: white; font-size: 13px; font-weight: bold; background: transparent; }
-QFrame#row { background: #2b2d30; border-bottom: 1px solid #17181a; }
-QFrame#row[selected="true"] { background: #3a4a5a; }
-QLabel#rowName { font-weight: bold; color: #e6e8ea; background: transparent; }
-QFrame#editorHead { background: #3a3d40; border-bottom: 1px solid #0c0d0e; }
-QLabel#editorTitle { font-size: 13px; font-weight: bold; color: #f0f2f4; background: transparent; }
-QLabel#section { font-weight: bold; color: #eceef0; padding: 10px 6px 2px 6px; background: transparent; }
-QFrame#prow { border-bottom: 1px solid #333639; background: transparent; }
-QLabel#plabel { color: #b4b8bc; padding-left: 18px; background: transparent; }
-QLabel#value { color: #79c2ff; text-decoration: underline; background: transparent; }
-QLabel#value:disabled { color: #6a6e72; }
-QComboBox { background: #3a3d40; border: 1px solid #111; padding: 1px 6px; min-width: 90px; }
-QCheckBox { background: transparent; spacing: 6px; }
-QCheckBox::indicator { width: 11px; height: 11px; border: 1px solid #0d0e0f; background: #1b1c1d; }
-QCheckBox::indicator:checked { background: #79c2ff; border-color: #2d6ea3; }
-QCheckBox::indicator:disabled { background: #2a2c2e; border-color: #3a3c3e; }
-QScrollArea, QScrollArea > QWidget > QWidget { background: #26282a; border: none; }
-QListWidget { background: #1f2123; border: none; }
-QListWidget::item { color: #d0d3d6; padding: 2px; }
-QListWidget::item:selected { background: #1f6fb2; color: white; }
-QMenuBar { background: #1b1c1d; }
-QMenuBar::item:selected { background: #2f3236; }
-QMenu { background: #2a2c2f; border: 1px solid #111; }
-QMenu::item:selected { background: #1f6fb2; }
-QSplitter::handle { background: #0c0d0e; }
+QWidget { color: #d6d6d6; font-family: Tahoma, Verdana, Arial; font-size: 11px; }
+QDialog#ofOptions { background: #1a1a1a; }
+QFrame#top { background: #262626; border-bottom: 1px solid #111; }
+QFrame#tools { background: #262626; border-bottom: 1px solid #0d0d0d; }
+QMenuBar { background: transparent; color: #cfcfcf; }
+QMenuBar::item { background: transparent; padding: 3px 7px; }
+QMenuBar::item:selected { background: #3a3a3a; }
+QMenu { background: #2c2c2c; border: 1px solid #0f0f0f; }
+QMenu::item { padding: 4px 22px; }
+QMenu::item:selected { background: #1d65a6; color: white; }
+QLabel#dim { color: #8c8c8c; background: transparent; }
+QLabel#brand { color: #e8e8e8; font-weight: bold; background: transparent; }
+
+QPushButton { background: qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #4b4b4b, stop:1 #3a3a3a);
+              border: 1px solid #141414; border-radius: 2px; padding: 3px 12px; color: #e2e2e2; }
+QPushButton:hover { background: qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #575757, stop:1 #444); }
+QPushButton:pressed { background: #2f2f2f; }
+QPushButton#tool { min-width: 120px; }
+QPushButton#ok { font-weight: bold; }
+
+QPushButton#paneltab { background: #1c1c1c; border: 1px solid #333; border-radius: 0; padding: 2px 30px;
+                       color: #bdbdbd; min-width: 70px; }
+QPushButton#paneltab:checked { background: #1c1c1c; color: #f2f2f2; border-color: #4a4a4a; }
+QPushButton#paneltab:!checked { color: #6f6f6f; }
+
+QPushButton#pill { background: qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #3a3a3a, stop:1 #1f1f1f);
+                   border: 1px solid #9a9a9a; border-radius: 8px; padding: 2px 12px;
+                   font-size: 9px; font-weight: bold; color: #e6e6e6; }
+QPushButton#pill:checked { background: #6a6a6a; color: white; }
+QPushButton#pillx { background: qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #3a3a3a, stop:1 #1f1f1f);
+                    border: 1px solid #9a9a9a; border-radius: 8px; padding: 0;
+                    font-size: 9px; font-weight: bold; color: #e6e6e6; }
+QPushButton#seg { background: #141414; border: 1px solid #0a2a48; border-radius: 0; padding: 1px 7px;
+                  font-size: 9px; font-weight: bold; color: #bfcfdf; }
+QPushButton#seg:checked { background: #3f93dc; color: white; }
+QPushButton#segl { background: #141414; border: 1px solid #0a2a48; border-top-left-radius: 8px;
+                   border-bottom-left-radius: 8px; border-top-right-radius: 0; border-bottom-right-radius: 0;
+                   padding: 1px 8px; font-size: 9px; font-weight: bold; color: #bfcfdf; }
+QPushButton#segl:checked { background: #3f93dc; color: white; }
+QPushButton#segr { background: #141414; border: 1px solid #0a2a48; border-top-right-radius: 8px;
+                   border-bottom-right-radius: 8px; border-top-left-radius: 0; border-bottom-left-radius: 0;
+                   padding: 1px 8px; font-size: 9px; font-weight: bold; color: #bfcfdf; }
+QPushButton#segr:checked { background: #3f93dc; color: white; }
+
+QFrame#panel { background: #2b2b2b; border: 1px solid #0b0b0b; }
+QFrame#panelHead { background: qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #2e2e2e, stop:1 #222);
+                   border-bottom: 1px solid #0b0b0b; }
+QLabel#panelTitle { color: #e9e9e9; font-weight: bold; background: transparent; padding: 3px 8px; }
+QToolButton#wing { background: #3d3d3d; border: 1px solid #111; color: #ddd; padding: 0 3px; }
+
+QFrame#previewBar { background: #2b2b2b; border-top: 1px solid #111; }
+QLabel#plab { color: #e4e4e4; background: transparent; }
+
+QFrame#globalBand { background: qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #2873b8, stop:1 #1b5b97);
+                    border: 1px solid #0d3459; }
+QFrame#globalBand[selected="true"] { border: 1px solid #9cc9f0; }
+QLabel#globalTitle { color: white; font-size: 12px; font-weight: bold; background: transparent; }
+QLabel#onBlue { color: #e3eef8; background: transparent; }
+
+QFrame#row { background: #2a2a2a; border-bottom: 1px solid #181818; }
+QFrame#row[selected="true"] { background: #3d4650; }
+QLabel#rowName { font-weight: bold; color: #f0f0f0; font-size: 11px; background: transparent; }
+QLabel#icon { color: #c8c8c8; background: transparent; }
+
+QFrame#editorHead { background: qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #4e5052, stop:1 #424446);
+                    border-bottom: 1px solid #0b0b0b; }
+QLabel#editorTitle { font-size: 12px; font-weight: bold; color: #f4f4f4; background: transparent; }
+QLabel#section { font-weight: bold; color: #f0f0f0; padding: 12px 6px 3px 8px; background: transparent; }
+QFrame#prow { border-bottom: 1px solid #3a3a3a; background: transparent; }
+QLabel#plabel { color: #d2d2d2; padding-left: 20px; background: transparent; }
+QLabel#value { color: #8fcbff; text-decoration: underline; background: transparent; }
+QLabel#value:disabled { color: #6c6c6c; }
+
+QComboBox { background: qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #4a4a4a, stop:1 #3a3a3a);
+            border: 1px solid #121212; border-radius: 2px; padding: 0 6px; min-width: 96px; color: #e6e6e6; }
+QComboBox::drop-down { border: none; width: 14px; }
+QComboBox QAbstractItemView { background: #2c2c2c; selection-background-color: #1d65a6; }
+QCheckBox { background: transparent; spacing: 5px; color: #e4e4e4; }
+QCheckBox::indicator { width: 10px; height: 10px; border: 1px solid #0d0d0d; background: #3a3a3a; }
+QCheckBox::indicator:checked { background: #d8d8d8; }
+QCheckBox::indicator:disabled { background: #2a2a2a; border-color: #3a3a3a; }
+
+QScrollArea { background: #2b2b2b; border: none; }
+QScrollArea > QWidget > QWidget { background: #2b2b2b; }
+QScrollBar:vertical { background: #232323; width: 12px; border-left: 1px solid #111; }
+QScrollBar::handle:vertical { background: qlineargradient(x1:0,y1:0,x2:1,y2:0, stop:0 #5a5a5a, stop:1 #484848);
+                              min-height: 30px; border: 1px solid #1a1a1a; }
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { background: #3a3a3a; height: 11px; border: 1px solid #111; }
+
+QPushButton#tabOff { background: #2a2a2a; border: 1px solid #111; border-radius: 0; padding: 6px 10px;
+                     font-weight: bold; font-size: 11px; color: #e0e0e0; text-align: left; }
+QPushButton#tabOn { background: qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #2a7fca, stop:1 #1b64a6);
+                    border: 1px solid #0d3459; border-radius: 0; padding: 6px 10px;
+                    font-weight: bold; font-size: 11px; color: white; text-align: left; }
+QFrame#crumbs { background: #232323; border-bottom: 1px solid #111; }
+QPushButton#crumb { background: qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #4a4a4a, stop:1 #393939);
+                    border: 1px solid #111; border-radius: 1px; padding: 1px 8px; font-size: 9px; color: #e8e8e8; }
+QLabel#crumbSep { color: #cfcfcf; background: transparent; }
+QListWidget#blist { background: #262626; border: none; }
+QSplitter::handle { background: #1a1a1a; }
 """
 
 
 def _pos(event):
     return event.position().toPoint() if hasattr(event, 'position') else event.pos()
+
+
+def _exec(menu, pos):
+    return menu.exec_(pos) if hasattr(menu, 'exec_') else menu.exec(pos)
+
+
+def _lens_icon(size=22, color=QtGui.QColor(230, 230, 230)):
+    """Iconezinho de lente (desenhado aqui) para as abas OBJECTS/BROWSER."""
+    pm = QtGui.QPixmap(size, size)
+    pm.fill(QtCore.Qt.transparent)
+    p = QtGui.QPainter(pm)
+    p.setRenderHint(QtGui.QPainter.Antialiasing)
+    g = QtGui.QLinearGradient(0, 0, size, size)
+    g.setColorAt(0, QtGui.QColor(200, 200, 200))
+    g.setColorAt(1, QtGui.QColor(70, 70, 70))
+    p.setBrush(QtGui.QBrush(g))
+    p.setPen(QtGui.QPen(QtGui.QColor(20, 20, 20), 1))
+    p.drawRoundedRect(2, 5, size - 6, size - 10, 3, 3)
+    p.setBrush(QtGui.QColor(25, 25, 25))
+    p.drawEllipse(QtCore.QPointF(size * 0.42, size * 0.5), size * 0.24, size * 0.24)
+    p.setBrush(QtGui.QColor(120, 170, 220))
+    p.drawEllipse(QtCore.QPointF(size * 0.42, size * 0.5), size * 0.1, size * 0.1)
+    p.end()
+    return QtGui.QIcon(pm)
+
+
+def _arrow_style():
+    """Setinha branca dos menus suspensos (PNG gerado no cache; o QSS so aceita arquivo)."""
+    try:
+        path = os.path.join(os.path.dirname(fb.cache_dir()), 'combo_arrow.png')
+        if not os.path.isfile(path):
+            pm = QtGui.QPixmap(9, 5)
+            pm.fill(QtCore.Qt.transparent)
+            p = QtGui.QPainter(pm)
+            p.setRenderHint(QtGui.QPainter.Antialiasing)
+            p.setPen(QtCore.Qt.NoPen)
+            p.setBrush(QtGui.QColor(230, 230, 230))
+            p.drawPolygon(QtGui.QPolygonF([QtCore.QPointF(0, 0), QtCore.QPointF(9, 0), QtCore.QPointF(4.5, 5)]))
+            p.end()
+            pm.save(path, 'PNG')
+        return '\nQComboBox::down-arrow { image: url(%s); width: 9px; height: 5px; }\n' % path.replace(os.sep, '/')
+    except Exception:
+        return ''
+
+
+def _folder_pixmap(w, h, name):
+    pm = QtGui.QPixmap(w, h)
+    pm.fill(QtGui.QColor(16, 16, 16))
+    p = QtGui.QPainter(pm)
+    p.setRenderHint(QtGui.QPainter.Antialiasing)
+    p.setPen(QtGui.QPen(QtGui.QColor(90, 90, 90), 1))
+    p.setBrush(QtGui.QColor(55, 55, 55))
+    fw, fh = w * 0.34, h * 0.42
+    x0, y0 = (w - fw) / 2, (h - fh) / 2
+    p.drawRoundedRect(QtCore.QRectF(x0, y0 - fh * 0.12, fw * 0.4, fh * 0.2), 2, 2)
+    p.drawRoundedRect(QtCore.QRectF(x0, y0, fw, fh), 3, 3)
+    p.end()
+    return pm
 
 
 # =================================================================== render
@@ -128,9 +247,9 @@ class RenderWorker(QtCore.QObject):
             self.queue.append(job)
             self.cond.notify()
 
-    def clear_queue(self, prefix=None):
+    def clear_queue(self, prefix):
         with self.cond:
-            self.queue = [j for j in self.queue if prefix and not j[0].startswith(prefix)]
+            self.queue = [j for j in self.queue if not j[0].startswith(prefix)]
 
     def stop(self):
         with self.cond:
@@ -163,8 +282,9 @@ def _image(raw, w, h):
 
 # =================================================================== widgets de valor
 class ScrubValue(QtWidgets.QLabel):
-    """Valor em azul sublinhado: arraste para os lados para mudar, duplo clique para digitar."""
-    changed = QtCore.Signal(float, bool)  # valor, final (soltou o mouse / digitou)
+    """Valor em azul sublinhado: arraste para os lados para mudar (Shift fino, Ctrl rapido),
+    duplo clique para digitar."""
+    changed = QtCore.Signal(float, bool)  # valor, final
 
     def __init__(self, value, unit='', step=0.5, integer=False, parent=None):
         super(ScrubValue, self).__init__(parent)
@@ -178,7 +298,7 @@ class ScrubValue(QtWidgets.QLabel):
     def _fmt(self, v):
         if self.integer:
             return '%d' % int(round(v))
-        return '%.1f' % v if abs(v) >= 10 or self.unit else '%.2f' % v
+        return '%.1f' % v if (abs(v) >= 10 or self.unit) else '%.2f' % v
 
     def _show(self):
         sep = ' ' if self.unit == '%' else ''
@@ -196,7 +316,8 @@ class ScrubValue(QtWidgets.QLabel):
         if self._press is None:
             return
         dx = _pos(e).x() - self._press[0]
-        mult = 0.1 if (e.modifiers() & QtCore.Qt.ShiftModifier) else (10.0 if e.modifiers() & QtCore.Qt.ControlModifier else 1.0)
+        mods = e.modifiers()
+        mult = 0.1 if (mods & QtCore.Qt.ShiftModifier) else (10.0 if mods & QtCore.Qt.ControlModifier else 1.0)
         v = self._press[1] + dx * self.step * mult
         if self.integer:
             v = round(v)
@@ -224,15 +345,15 @@ class ScrubValue(QtWidgets.QLabel):
 class ColorSwatch(QtWidgets.QPushButton):
     changed = QtCore.Signal(tuple)
 
-    def __init__(self, rgb, parent=None):
+    def __init__(self, rgb, w=30, h=14, parent=None):
         super(ColorSwatch, self).__init__(parent)
-        self.setFixedSize(30, 14)
+        self.setFixedSize(w, h)
         self.rgb = tuple(rgb)
         self.clicked.connect(self._pick)
         self._paint()
 
     def _paint(self):
-        self.setStyleSheet('background: rgb(%d,%d,%d); border: 1px solid #000; border-radius: 0; padding: 0;'
+        self.setStyleSheet('background: rgb(%d,%d,%d); border: 1px solid #d0d0d0; border-radius: 0; padding: 0;'
                            % self.rgb)
 
     def set_rgb(self, rgb):
@@ -253,14 +374,60 @@ def _label(text, name=None):
     return l
 
 
-def _panel(title):
+def _panel(title, wing_menu=None):
+    """Painel com barra de titulo (e o botao de "asa" no canto, como no original)."""
     frame = QtWidgets.QFrame()
     frame.setObjectName('panel')
     lay = QtWidgets.QVBoxLayout(frame)
     lay.setContentsMargins(0, 0, 0, 0)
     lay.setSpacing(0)
-    lay.addWidget(_label(title, 'panelTitle'))
+    head = QtWidgets.QFrame()
+    head.setObjectName('panelHead')
+    hl = QtWidgets.QHBoxLayout(head)
+    hl.setContentsMargins(0, 0, 2, 0)
+    hl.addWidget(_label(title, 'panelTitle'))
+    hl.addStretch(1)
+    if wing_menu is not None:
+        wing = QtWidgets.QToolButton()
+        wing.setObjectName('wing')
+        wing.setText(u'▸')
+        wing.setPopupMode(QtWidgets.QToolButton.InstantPopup)
+        wing.setMenu(wing_menu)
+        hl.addWidget(wing)
+    lay.addWidget(head)
     return frame, lay
+
+
+class ThumbDelegate(QtWidgets.QStyledItemDelegate):
+    """Miniatura com o nome embaixo, alinhado a esquerda, em negrito (lista do Browser)."""
+
+    def __init__(self, owner):
+        super(ThumbDelegate, self).__init__(owner)
+        self.owner = owner
+
+    def sizeHint(self, option, index):
+        w, h = self.owner.thumb_size
+        return QtCore.QSize(w + 12, h + 26)
+
+    def paint(self, p, option, index):
+        w, h = self.owner.thumb_size
+        r = option.rect
+        selected = option.state & QtWidgets.QStyle.State_Selected
+        if selected:
+            p.fillRect(r.adjusted(2, 1, -2, -1), QtGui.QColor(29, 101, 166))
+        icon = index.data(QtCore.Qt.DecorationRole)
+        x, y = r.x() + 6, r.y() + 4
+        if isinstance(icon, QtGui.QIcon):
+            pm = icon.pixmap(w, h)
+            p.drawPixmap(QtCore.QRect(x, y, w, h), pm)
+        p.setPen(QtGui.QColor(10, 10, 10))
+        p.drawRect(QtCore.QRect(x, y, w - 1, h - 1))
+        font = QtGui.QFont(p.font())
+        font.setBold(True)
+        p.setFont(font)
+        p.setPen(QtGui.QColor(240, 240, 240))
+        p.drawText(QtCore.QRect(x, y + h + 3, w, 18), QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter,
+                   index.data(QtCore.Qt.DisplayRole))
 
 
 # =================================================================== janela
@@ -269,8 +436,8 @@ class OptionsWindow(QtWidgets.QDialog):
         super(OptionsWindow, self).__init__(parent)
         self.setObjectName('ofOptions')
         self.setWindowTitle('Optical Flares Options')
-        self.setStyleSheet(STYLE)
-        self.resize(1360, 860)
+        self.setStyleSheet(STYLE + _arrow_style())
+        self.resize(1280, 860)
         self.node_name = node.fullName() if node is not None else None
         self.renderer = Renderer()
         self.worker = RenderWorker(self.renderer)
@@ -278,11 +445,18 @@ class OptionsWindow(QtWidgets.QDialog):
         self.preset = ofp.parse(preset_bytes) if preset_bytes else ofp.Preset()
         self.original = self.preset.clone()
         self.preset_name = ''
+        self.preset_path = None
         self.sel = -1  # -1 = Global Parameters
         self.undo, self.redo = [ofp.serialize(self.preset)], []
-        self.light, self.center, self.aspect = self._node_geometry()
+        # preview independente do no, como no original: luz em 23,6 / 27,4 e centro no meio
+        self.light = [DEFAULT_PREVIEW_POS[0] / 100.0, 1 - DEFAULT_PREVIEW_POS[1] / 100.0]
+        self.center = [0.5, 0.5]
         self.pv_bright, self.pv_scale = 100.0, 100.0
         self.stack_rows = []
+        self.thumb_size = (220, 124)
+        self.browse_rel = ''
+        self.mode = 'browser'
+        self.obj_mode = 'basic'
         self._preview_timer = QtCore.QTimer(self)
         self._preview_timer.setSingleShot(True)
         self._preview_timer.setInterval(15)
@@ -290,35 +464,27 @@ class OptionsWindow(QtWidgets.QDialog):
         self._build()
         self._refresh_all()
 
-    # ------------------------------------------------------------------ dados do no
+    # ------------------------------------------------------------------ no
     def _node(self):
         if nuke is None or not self.node_name:
             return None
         return nuke.toNode(self.node_name)
-
-    def _node_geometry(self):
-        node = self._node()
-        if node is None:
-            return [0.3, 0.6], [0.5, 0.5], 16.0 / 9.0
-        try:
-            fmt = node.format()
-            w, h = float(fmt.width()), float(fmt.height())
-            lx, ly = node['PositionXY'].value()
-            cx, cy = node['CenterPosition'].value()
-            return [lx / w, ly / h], [cx / w, cy / h], w / h
-        except Exception:
-            return [0.3, 0.6], [0.5, 0.5], 16.0 / 9.0
 
     # ------------------------------------------------------------------ layout
     def _build(self):
         root = QtWidgets.QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
-        root.addWidget(self._build_menubar())
-        root.addWidget(self._build_toolbar())
+        root.addWidget(self._build_top())
+        root.addWidget(self._build_tools())
 
+        body = QtWidgets.QWidget()
+        bl = QtWidgets.QHBoxLayout(body)
+        bl.setContentsMargins(6, 6, 6, 6)
         self.hsplit = QtWidgets.QSplitter(QtCore.Qt.Horizontal)
+        self.hsplit.setHandleWidth(6)
         self.vsplit = QtWidgets.QSplitter(QtCore.Qt.Vertical)
+        self.vsplit.setHandleWidth(6)
         self.preview_panel = self._build_preview()
         self.stack_panel = self._build_stack()
         self.vsplit.addWidget(self.preview_panel)
@@ -328,16 +494,21 @@ class OptionsWindow(QtWidgets.QDialog):
         self.hsplit.addWidget(self.vsplit)
         self.hsplit.addWidget(self.editor_panel)
         self.hsplit.addWidget(self.browser_panel)
-        root.addWidget(self.hsplit, 1)
+        bl.addWidget(self.hsplit)
+        root.addWidget(body, 1)
         self._reset_panels()
 
     def _reset_panels(self):
-        self.hsplit.setSizes([560, 420, 360])
-        self.vsplit.setSizes([420, 400])
+        self.hsplit.setSizes([520, 420, 300])
+        self.vsplit.setSizes([380, 420])
         for b in self.panel_buttons.values():
             b.setChecked(True)
 
-    def _build_menubar(self):
+    def _build_top(self):
+        frame = QtWidgets.QFrame()
+        frame.setObjectName('top')
+        lay = QtWidgets.QHBoxLayout(frame)
+        lay.setContentsMargins(6, 2, 10, 2)
         bar = QtWidgets.QMenuBar()
         m_file = bar.addMenu('File')
         self._act(m_file, 'Load Preset...', self._load_preset_dialog, 'Ctrl+O')
@@ -355,7 +526,24 @@ class OptionsWindow(QtWidgets.QDialog):
         self._act(m_edit, 'Clear All', self._clear_all)
         m_view = bar.addMenu('View')
         self._act(m_view, 'Reset Panels', self._reset_panels)
-        return bar
+        lay.addWidget(bar)
+        lay.addStretch(2)
+        lay.addWidget(_label('Panels:', 'dim'))
+        lay.addSpacing(6)
+        self.panel_buttons = {}
+        for name in ('Preview', 'Stack', 'Editor', 'Browser'):
+            b = QtWidgets.QPushButton(name)
+            b.setObjectName('paneltab')
+            b.setCheckable(True)
+            b.setChecked(True)
+            b.toggled.connect(lambda on, n=name: self._toggle_panel(n, on))
+            lay.addWidget(b)
+            self.panel_buttons[name] = b
+        lay.addStretch(3)
+        lay.addWidget(_label('Optical Flares', 'brand'))
+        lay.addSpacing(8)
+        lay.addWidget(_label(VERSION, 'dim'))
+        return frame
 
     def _act(self, menu, text, fn, shortcut=None):
         a = QAction(text, self)
@@ -366,29 +554,12 @@ class OptionsWindow(QtWidgets.QDialog):
         self.addAction(a)
         return a
 
-    def _build_toolbar(self):
+    def _build_tools(self):
         frame = QtWidgets.QFrame()
-        frame.setObjectName('bar')
-        lay = QtWidgets.QVBoxLayout(frame)
-        lay.setContentsMargins(8, 4, 8, 6)
-        top = QtWidgets.QHBoxLayout()
-        top.addStretch(1)
-        top.addWidget(_label('Panels:'))
-        self.panel_buttons = {}
-        for name in ('Preview', 'Stack', 'Editor', 'Browser'):
-            b = QtWidgets.QPushButton(name)
-            b.setObjectName('panelToggle')
-            b.setCheckable(True)
-            b.setChecked(True)
-            b.toggled.connect(lambda on, n=name: self._toggle_panel(n, on))
-            top.addWidget(b)
-            self.panel_buttons[name] = b
-        top.addStretch(1)
-        ver = _label(VERSION)
-        ver.setStyleSheet('color:#8a8e92;')
-        top.addWidget(ver)
-        lay.addLayout(top)
-        row = QtWidgets.QHBoxLayout()
+        frame.setObjectName('tools')
+        row = QtWidgets.QHBoxLayout(frame)
+        row.setContentsMargins(10, 4, 10, 6)
+        row.setSpacing(10)
         self.btn_undo = QtWidgets.QPushButton('Undo (0)')
         self.btn_undo.clicked.connect(self._undo)
         self.btn_redo = QtWidgets.QPushButton('Redo (0)')
@@ -398,19 +569,18 @@ class OptionsWindow(QtWidgets.QDialog):
         clear = QtWidgets.QPushButton('Clear All')
         clear.clicked.connect(self._clear_all)
         for b in (self.btn_undo, self.btn_redo, dup, clear):
-            b.setMinimumWidth(110)
+            b.setObjectName('tool')
             row.addWidget(b)
         row.addStretch(1)
         cancel = QtWidgets.QPushButton('Cancel')
-        cancel.setMinimumWidth(110)
+        cancel.setObjectName('tool')
         cancel.clicked.connect(self.reject)
         ok = QtWidgets.QPushButton('OK')
-        ok.setObjectName('ok')
-        ok.setMinimumWidth(110)
+        ok.setObjectName('tool')
+        ok.setStyleSheet('font-weight: bold;')
         ok.clicked.connect(self._ok)
         row.addWidget(cancel)
         row.addWidget(ok)
-        lay.addLayout(row)
         return frame
 
     def _toggle_panel(self, name, on):
@@ -425,42 +595,45 @@ class OptionsWindow(QtWidgets.QDialog):
         self.preview.setAlignment(QtCore.Qt.AlignCenter)
         self.preview.setMinimumSize(320, 180)
         self.preview.setStyleSheet('background: black;')
-        self.preview.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
+        self.preview.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Ignored)
         self.preview.installEventFilter(self)
         lay.addWidget(self.preview, 1)
-        grid = QtWidgets.QGridLayout()
-        grid.setContentsMargins(12, 6, 12, 8)
-        grid.setHorizontalSpacing(14)
+        bar = QtWidgets.QFrame()
+        bar.setObjectName('previewBar')
+        grid = QtWidgets.QGridLayout(bar)
+        grid.setContentsMargins(22, 5, 22, 6)
+        grid.setHorizontalSpacing(10)
+        grid.setVerticalSpacing(3)
         self.pv_b = ScrubValue(100, '%', 1.0)
         self.pv_b.changed.connect(lambda v, f: self._set_pv('b', v))
         self.pv_s = ScrubValue(100, '%', 1.0)
         self.pv_s.changed.connect(lambda v, f: self._set_pv('s', v))
-        self.pv_x = ScrubValue(self.light[0] * 100, '', 0.2)
+        self.pv_x = ScrubValue(DEFAULT_PREVIEW_POS[0], '', 0.2)
         self.pv_x.changed.connect(lambda v, f: self._set_pv('x', v))
-        self.pv_y = ScrubValue((1 - self.light[1]) * 100, '', 0.2)
+        self.pv_y = ScrubValue(DEFAULT_PREVIEW_POS[1], '', 0.2)
         self.pv_y.changed.connect(lambda v, f: self._set_pv('y', v))
         self.guides = QtWidgets.QCheckBox('Guides')
         self.guides.toggled.connect(lambda _on: self._schedule_preview())
         self.show_bg = QtWidgets.QCheckBox('Show BG')
         self.show_bg.setEnabled(False)
         self.show_bg.setToolTip('O fundo do no ainda nao aparece neste preview.')
-        grid.addWidget(_label('Preview Brightness'), 0, 0)
+        grid.addWidget(_label('Preview Brightness', 'plab'), 0, 0)
         grid.addWidget(self.pv_b, 0, 1)
-        grid.addWidget(_label('Preview Position'), 0, 2)
+        grid.addWidget(_label('Preview Position', 'plab'), 0, 3)
         pos = QtWidgets.QHBoxLayout()
+        pos.setSpacing(4)
         pos.addWidget(self.pv_x)
-        pos.addWidget(_label(','))
+        pos.addWidget(_label(',', 'plab'))
         pos.addWidget(self.pv_y)
         pos.addStretch(1)
-        grid.addLayout(pos, 0, 3)
-        grid.addWidget(_label('Preview Scale'), 1, 0)
+        grid.addLayout(pos, 0, 4)
+        grid.addWidget(_label('Preview Scale', 'plab'), 1, 0)
         grid.addWidget(self.pv_s, 1, 1)
-        chk = QtWidgets.QHBoxLayout()
-        chk.addWidget(self.guides)
-        chk.addWidget(self.show_bg)
-        chk.addStretch(1)
-        grid.addLayout(chk, 1, 3)
-        lay.addLayout(grid)
+        grid.addWidget(self.guides, 1, 3)
+        grid.addWidget(self.show_bg, 1, 4)
+        grid.setColumnStretch(2, 1)
+        grid.setColumnStretch(5, 1)
+        lay.addWidget(bar)
         return frame
 
     def _set_pv(self, what, v):
@@ -475,36 +648,30 @@ class OptionsWindow(QtWidgets.QDialog):
         self._schedule_preview()
 
     def eventFilter(self, obj, ev):
-        # clicar/arrastar no preview move a luz (so no preview, como no original)
-        if obj is self.preview and ev.type() in (QtCore.QEvent.MouseButtonPress, QtCore.QEvent.MouseMove):
-            if ev.type() == QtCore.QEvent.MouseMove and not (ev.buttons() & QtCore.Qt.LeftButton):
-                return False
-            pm = self.preview.pixmap()
-            if pm is not None and not pm.isNull():
+        if obj is self.preview:
+            t = ev.type()
+            if t in (QtCore.QEvent.MouseButtonPress, QtCore.QEvent.MouseMove):
+                if t == QtCore.QEvent.MouseMove and not (ev.buttons() & QtCore.Qt.LeftButton):
+                    return False
                 p = _pos(ev)
-                ox = (self.preview.width() - pm.width()) / 2.0
-                oy = (self.preview.height() - pm.height()) / 2.0
-                x = (p.x() - ox) / float(pm.width())
-                y = (p.y() - oy) / float(pm.height())
+                x = p.x() / float(max(1, self.preview.width()))
+                y = p.y() / float(max(1, self.preview.height()))
                 self.light = [min(1.5, max(-0.5, x)), min(1.5, max(-0.5, 1 - y))]
-                self.pv_x.set_value(self.light[0] * 100)
-                self.pv_y.set_value((1 - self.light[1]) * 100)
+                self.pv_x.set_value(x * 100)
+                self.pv_y.set_value(y * 100)
                 self._schedule_preview()
                 return True
-        if obj is self.preview and ev.type() == QtCore.QEvent.Resize:
-            self._schedule_preview()
+            if t == QtCore.QEvent.Resize:
+                self._schedule_preview()
         return super(OptionsWindow, self).eventFilter(obj, ev)
 
     def _schedule_preview(self):
         self._preview_timer.start()
 
     def _request_preview(self):
+        # o preview ocupa o painel inteiro (sem tarjas), como no original
         w = max(64, self.preview.width())
         h = max(36, self.preview.height())
-        if w / float(h) > self.aspect:
-            w = int(h * self.aspect)
-        else:
-            h = int(w / self.aspect)
         data = ofp.serialize(self.preset)
         light, center = list(self.light), list(self.center)
         b, s = self.pv_bright / 100.0, self.pv_scale / 100.0
@@ -517,34 +684,44 @@ class OptionsWindow(QtWidgets.QDialog):
 
     # ------------------------------------------------------------------ stack
     def _build_stack(self):
-        frame, lay = _panel('Stack')
+        wing = QtWidgets.QMenu(self)
+        wing.addAction('Duplicate', self._duplicate)
+        wing.addAction('Move Up', lambda: self._move(-1))
+        wing.addAction('Move Down', lambda: self._move(1))
+        wing.addAction('Delete', self._delete_selected)
+        wing.addSeparator()
+        wing.addAction('Clear All', self._clear_all)
+        frame, lay = _panel('Stack', wing)
         band = QtWidgets.QFrame()
         band.setObjectName('globalBand')
+        self.global_band = band
         bl = QtWidgets.QHBoxLayout(band)
-        bl.setContentsMargins(8, 6, 8, 6)
+        bl.setContentsMargins(8, 7, 10, 7)
+        bl.setSpacing(10)
         self.global_thumb = QtWidgets.QLabel()
-        self.global_thumb.setFixedSize(80, 45)
-        self.global_thumb.setStyleSheet('background:black; border:1px solid #0c3a62;')
+        self.global_thumb.setFixedSize(76, 43)
+        self.global_thumb.setStyleSheet('background:black; border:1px solid #0d3459;')
         bl.addWidget(self.global_thumb)
         mid = QtWidgets.QVBoxLayout()
-        title = _label('GLOBAL PARAMETERS', 'globalTitle')
-        mid.addWidget(title)
+        mid.setSpacing(5)
+        mid.addWidget(_label('GLOBAL PARAMETERS', 'globalTitle'))
         seg = QtWidgets.QHBoxLayout()
+        seg.setSpacing(0)
         self.btn_add = QtWidgets.QPushButton('ADD')
+        self.btn_add.setObjectName('segl')
         self.btn_scn = QtWidgets.QPushButton('SCN')
+        self.btn_scn.setObjectName('segr')
         for b in (self.btn_add, self.btn_scn):
-            b.setObjectName('pill')
             b.setCheckable(True)
             seg.addWidget(b)
         self.btn_add.clicked.connect(lambda: self._set_global_enum(9, 0))
         self.btn_scn.clicked.connect(lambda: self._set_global_enum(9, 1))
-        seg.addSpacing(12)
-        self.global_color = ColorSwatch((126, 146, 180))
+        seg.addSpacing(28)
+        self.global_color = ColorSwatch((126, 146, 180), 30, 16)
         self.global_color.changed.connect(lambda rgb: self._set_global_color(4, rgb))
         seg.addWidget(self.global_color)
-        gc = _label('Global Color')
-        gc.setStyleSheet('background:transparent; color:#dfe9f3;')
-        seg.addWidget(gc)
+        seg.addSpacing(10)
+        seg.addWidget(_label('Global Color', 'onBlue'))
         seg.addStretch(1)
         mid.addLayout(seg)
         bl.addLayout(mid, 1)
@@ -587,26 +764,28 @@ class OptionsWindow(QtWidgets.QDialog):
     def _make_row(self, i, o):
         row = QtWidgets.QFrame()
         row.setObjectName('row')
-        row.setFixedHeight(56)
+        row.setFixedHeight(54)
         lay = QtWidgets.QHBoxLayout(row)
         lay.setContentsMargins(6, 4, 8, 4)
+        lay.setSpacing(8)
         thumb = QtWidgets.QLabel()
-        thumb.setFixedSize(80, 45)
-        thumb.setStyleSheet('background:black; border:1px solid #111;')
+        thumb.setFixedSize(72, 41)
+        thumb.setStyleSheet('background:black; border:1px solid #4a4a4a;')
         lay.addWidget(thumb)
         col = QtWidgets.QVBoxLayout()
+        col.setSpacing(2)
         name = _label(o.name or o.type_name, 'rowName')
         name.setToolTip('%s (duplo clique para renomear)' % o.type_name)
         name.mouseDoubleClickEvent = lambda e, k=i: self._rename(k)
         col.addWidget(name)
         vals = QtWidgets.QHBoxLayout()
-        sun = _label(u'☀')
-        vals.addWidget(sun)
+        vals.setSpacing(4)
+        vals.addWidget(_label(u'☀', 'icon'))
         bv = ScrubValue(o.get(0, 100.0) or 0.0, '', 0.5)
         bv.changed.connect(lambda v, f, k=i: self._set_obj_float(k, 0, v, f))
         vals.addWidget(bv)
-        vals.addSpacing(14)
-        vals.addWidget(_label(u'▣'))
+        vals.addSpacing(22)
+        vals.addWidget(_label(u'▣', 'icon'))
         sv = ScrubValue(o.get(1, 100.0) or 0.0, '', 0.5)
         sv.changed.connect(lambda v, f, k=i: self._set_obj_float(k, 1, v, f))
         vals.addWidget(sv)
@@ -619,16 +798,16 @@ class OptionsWindow(QtWidgets.QDialog):
             b.setObjectName('pill')
             b.setCheckable(True)
             b.setChecked(flag)
+            b.setFixedSize(54, 18)
             lay.addWidget(b)
         hide.toggled.connect(lambda on, k=i: self._set_flag(k, 'hidden', on))
         solo.toggled.connect(lambda on, k=i: self._set_flag(k, 'solo', on))
         x = QtWidgets.QPushButton('X')
-        x.setObjectName('pill')
-        x.setFixedSize(24, 18)
-        x.setStyleSheet('padding: 0;')
+        x.setObjectName('pillx')
+        x.setFixedSize(20, 18)
         x.clicked.connect(lambda _c=False, k=i: self._delete(k))
         lay.addWidget(x)
-        row.thumb, row.bv, row.sv = thumb, bv, sv
+        row.thumb = thumb
         row.mousePressEvent = lambda e, k=i: self._select(k)
         row.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
         row.customContextMenuRequested.connect(lambda p, k=i, r=row: self._row_menu(k, r.mapToGlobal(p)))
@@ -643,15 +822,19 @@ class OptionsWindow(QtWidgets.QDialog):
         m.addAction('Move Down', lambda: self._move(1))
         m.addSeparator()
         m.addAction('Delete', lambda: self._delete(k))
-        m.exec_(gpos) if hasattr(m, 'exec_') else m.exec(gpos)
+        _exec(m, gpos)
 
     def _mark_selection(self):
         for i, r in enumerate(self.stack_rows):
             r.setProperty('selected', 'true' if i == self.sel else 'false')
             r.style().unpolish(r)
             r.style().polish(r)
+        self.global_band.setProperty('selected', 'true' if self.sel < 0 else 'false')
+        self.global_band.style().unpolish(self.global_band)
+        self.global_band.style().polish(self.global_band)
 
     def _request_stack_thumbs(self):
+        """Miniaturas por objeto: renderiza 3x maior e reduz (objetos pequenos nao somem)."""
         self.worker.clear_queue('stack:')
         base = self.preset.clone()
         for o in base.objects:
@@ -659,24 +842,33 @@ class OptionsWindow(QtWidgets.QDialog):
             o.solo = False
         data = ofp.serialize(base)
         light, center = list(self.light), list(self.center)
+        W, H = 216, 123
+
+        def small(raw):
+            img = _image(raw, W, H)
+            return img.scaled(72, 41, QtCore.Qt.IgnoreAspectRatio, QtCore.Qt.SmoothTransformation)
+
         for i in range(len(self.preset.objects)):
             def job(i=i):
-                raw = self.renderer.render_mem(data, 80, 45, light, center, i, 1.0, 1.0)
-                return _image(raw, 80, 45) if raw else None
+                raw = self.renderer.render_mem(data, W, H, light, center, i, 1.0, 1.0)
+                return small(raw) if raw else None
             self.worker.add(('stack:%d' % i, job))
+        full = ofp.serialize(self.preset)
 
         def gjob():
-            raw = self.renderer.render_mem(ofp.serialize(self.preset), 80, 45, light, center, -1, 1.0, 1.0)
-            return _image(raw, 80, 45) if raw else None
+            raw = self.renderer.render_mem(full, W, H, light, center, -1, 1.0, 1.0)
+            return small(raw) if raw else None
         self.worker.add(('stack:global', gjob))
 
     # ------------------------------------------------------------------ editor
     def _build_editor(self):
-        frame, lay = _panel('Editor')
+        wing = QtWidgets.QMenu(self)
+        wing.addAction('Reset', self._reset_selected)
+        frame, lay = _panel('Editor', wing)
         head = QtWidgets.QFrame()
         head.setObjectName('editorHead')
         hl = QtWidgets.QHBoxLayout(head)
-        hl.setContentsMargins(10, 8, 10, 8)
+        hl.setContentsMargins(12, 9, 10, 9)
         self.editor_title = _label('GLOBAL PARAMETERS', 'editorTitle')
         hl.addWidget(self.editor_title, 1)
         reset = QtWidgets.QPushButton('RESET')
@@ -699,7 +891,7 @@ class OptionsWindow(QtWidgets.QDialog):
         self.editor_title.setText('GLOBAL PARAMETERS' if is_global else (target.name or target.type_name))
         host = QtWidgets.QWidget()
         lay = QtWidgets.QVBoxLayout(host)
-        lay.setContentsMargins(4, 0, 10, 10)
+        lay.setContentsMargins(4, 0, 12, 12)
         lay.setSpacing(0)
         sections, cur = [], []
         for p in target.params:
@@ -722,78 +914,87 @@ class OptionsWindow(QtWidgets.QDialog):
     def _param_row(self, target, p, is_global):
         row = QtWidgets.QFrame()
         row.setObjectName('prow')
+        row.setFixedHeight(22)
         hl = QtWidgets.QHBoxLayout(row)
-        hl.setContentsMargins(0, 3, 0, 3)
+        hl.setContentsMargins(0, 0, 0, 0)
+        hl.setSpacing(6)
         lab = _label(P.label(p.id, getattr(target, 'type', None), is_global), 'plabel')
-        lab.setFixedWidth(190)
+        lab.setFixedWidth(205)
         hl.addWidget(lab)
         unit = P.unit(p.id, is_global)
         step = P.drag_step(p.id, is_global)
         integer = P.is_integer(p.id, is_global)
         if p.type == ofp.FLOAT:
             w = ScrubValue(p.f(), unit, step, integer)
-            w.changed.connect(lambda v, f, p=p: self._edit(p, lambda: p.set_f(v), f))
+            w.changed.connect(lambda v, f, p=p: self._edit(lambda: p.set_f(v), f))
             hl.addWidget(w)
         elif p.type == ofp.FLOAT2:
             a = ScrubValue(p.f(0), unit, step, integer)
             b = ScrubValue(p.f(1), unit, step, integer)
-            a.changed.connect(lambda v, f, p=p: self._edit(p, lambda: p.set_f(v, 0), f))
-            b.changed.connect(lambda v, f, p=p: self._edit(p, lambda: p.set_f(v, 1), f))
+            a.changed.connect(lambda v, f, p=p: self._edit(lambda: p.set_f(v, 0), f))
+            b.changed.connect(lambda v, f, p=p: self._edit(lambda: p.set_f(v, 1), f))
             hl.addWidget(a)
-            hl.addWidget(_label(','))
+            hl.addWidget(_label(',', 'plab'))
             hl.addWidget(b)
         elif p.type == ofp.COLOR:
             sw = ColorSwatch(p.rgb())
-            sw.changed.connect(lambda rgb, p=p: self._edit(p, lambda: p.set_rgb(*rgb), True))
+            sw.changed.connect(lambda rgb, p=p: self._edit(lambda: p.set_rgb(*rgb), True))
             hl.addWidget(sw)
             if p.id == 83:  # Color Shift tem "ligado"
                 on = QtWidgets.QCheckBox()
                 on.setChecked(p.color_enabled())
-                on.toggled.connect(lambda v, p=p: self._edit(p, lambda: p.set_color_enabled(v), True))
+                on.toggled.connect(lambda v, p=p: self._edit(lambda: p.set_color_enabled(v), True))
                 hl.addWidget(on)
         elif p.type == ofp.ENUM:
             opts = P.enum_options(p.id, is_global)
             cb = QtWidgets.QComboBox()
+            cb.setFixedHeight(17)
             cur = p.i()
             items = list(opts) if opts else []
             while len(items) <= cur:
                 items.append(str(len(items)))
             cb.addItems(items)
             cb.setCurrentIndex(max(0, cur))
-            cb.currentIndexChanged.connect(lambda ix, p=p: self._edit(p, lambda: p.set_i(ix), True))
+            cb.currentIndexChanged.connect(lambda ix, p=p: self._edit(lambda: p.set_i(ix), True))
             hl.addWidget(cb)
         elif p.type == ofp.BOOL:
             ck = QtWidgets.QCheckBox()
             ck.setChecked(bool(p.i()))
-            ck.toggled.connect(lambda v, p=p: self._edit(p, lambda: p.set_i(1 if v else 0), True))
+            ck.toggled.connect(lambda v, p=p: self._edit(lambda: p.set_i(1 if v else 0), True))
             hl.addWidget(ck)
         elif p.type == ofp.TEXTURE:
-            folder = 'Glass' if is_global else 'Elements'
-            names = self._texture_names(folder)
-            cb = QtWidgets.QComboBox()
-            cb.addItem('None')
-            cb.addItems(names)
-            current = p.texture_name()
-            if current.endswith(' (U)'):
-                current = current[:-4]
-            if p.i() == 0 and is_global or current.lower() in ('', 'none'):
-                current = ''  # textura da lente desligada (indice 0) ou "None"
-            low = [n.lower() for n in names]
-            if current and current.lower() in low:
-                current = names[low.index(current.lower())]
-            if current and current not in names:
-                cb.addItem(current + ' (faltando)')
-                cb.setCurrentIndex(cb.count() - 1)
-            elif current:
-                cb.setCurrentIndex(names.index(current) + 1)
-            cb.currentIndexChanged.connect(
-                lambda ix, p=p, names=names: self._edit(
-                    p, lambda: p.set_texture(ix if 0 < ix <= len(names) else 0,
-                                             names[ix - 1] if 0 < ix <= len(names) else ''), True)
-                if ix <= len(names) else None)
-            hl.addWidget(cb)
+            hl.addWidget(self._texture_combo(p, is_global))
         hl.addStretch(1)
         return row
+
+    def _texture_combo(self, p, is_global):
+        names = self._texture_names('Glass' if is_global else 'Elements')
+        cb = QtWidgets.QComboBox()
+        cb.setFixedHeight(17)
+        cb.addItem('None')
+        cb.addItems(names)
+        current = p.texture_name()
+        if current.endswith(' (U)'):
+            current = current[:-4]
+        if (is_global and p.i() == 0) or current.lower() in ('', 'none'):
+            current = ''  # desligada
+        low = [n.lower() for n in names]
+        if current and current.lower() in low:
+            cb.setCurrentIndex(low.index(current.lower()) + 1)
+        elif current:
+            cb.addItem(current + ' (faltando)')
+            cb.setCurrentIndex(cb.count() - 1)
+
+        def pick(ix, p=p, names=names):
+            if ix > len(names):
+                return
+            if ix == 0:
+                p.set_texture(0, '')
+            else:
+                p.set_texture(ix, names[ix - 1])
+            self._edit(lambda: None, True)
+        cb.currentIndexChanged.connect(pick)
+        return cb
 
     def _texture_names(self, folder):
         d = os.path.join(fb.textures_root(), folder)
@@ -804,7 +1005,7 @@ class OptionsWindow(QtWidgets.QDialog):
             return []
 
     # ------------------------------------------------------------------ edicao
-    def _edit(self, p, fn, final):
+    def _edit(self, fn, final):
         fn()
         self._changed(final, thumbs=final)
 
@@ -874,7 +1075,6 @@ class OptionsWindow(QtWidgets.QDialog):
     def _duplicate(self):
         if self.sel < 0:
             return
-        import copy
         o = copy.deepcopy(self.preset.objects[self.sel])
         self.preset.objects.insert(self.sel + 1, o)
         self.sel += 1
@@ -898,7 +1098,6 @@ class OptionsWindow(QtWidgets.QDialog):
         self._rebuild_editor()
 
     def _reset_selected(self):
-        import copy
         if self.sel < 0:
             self.preset.globals = copy.deepcopy(self.original.globals)
         else:
@@ -950,83 +1149,140 @@ class OptionsWindow(QtWidgets.QDialog):
         frame, lay = _panel('Browser')
         tabs = QtWidgets.QHBoxLayout()
         tabs.setSpacing(0)
-        self.tab_objects = QtWidgets.QPushButton('OBJECTS')
-        self.tab_browser = QtWidgets.QPushButton('BROWSER')
+        self.tab_objects = QtWidgets.QPushButton('  OBJECTS')
+        self.tab_browser = QtWidgets.QPushButton('  BROWSER')
+        icon = _lens_icon(24)
         for b in (self.tab_objects, self.tab_browser):
-            b.setObjectName('tab')
-            b.setCheckable(True)
+            b.setIcon(icon)
+            b.setIconSize(QtCore.QSize(24, 24))
             tabs.addWidget(b)
         self.tab_objects.clicked.connect(lambda: self._browser_mode('objects'))
         self.tab_browser.clicked.connect(lambda: self._browser_mode('browser'))
         lay.addLayout(tabs)
 
-        nav = QtWidgets.QHBoxLayout()
-        nav.setContentsMargins(6, 6, 6, 6)
-        self.folder_combo = QtWidgets.QComboBox()
-        self.folder_combo.currentIndexChanged.connect(lambda _i: self._fill_presets())
-        self.show_basic = QtWidgets.QPushButton('Basic')
-        self.show_custom = QtWidgets.QPushButton('Custom')
-        for b in (self.show_basic, self.show_custom):
-            b.setObjectName('pill')
-            b.setCheckable(True)
-        self.show_basic.clicked.connect(lambda: self._objects_mode('basic'))
-        self.show_custom.clicked.connect(lambda: self._objects_mode('custom'))
-        self.show_label = _label('Show')
-        nav.addWidget(self.show_label)
-        nav.addWidget(self.show_basic)
-        nav.addWidget(self.show_custom)
-        nav.addWidget(self.folder_combo, 1)
-        lay.addLayout(nav)
+        self.crumbs = QtWidgets.QFrame()
+        self.crumbs.setObjectName('crumbs')
+        self.crumbs_lay = QtWidgets.QHBoxLayout(self.crumbs)
+        self.crumbs_lay.setContentsMargins(6, 5, 6, 5)
+        self.crumbs_lay.setSpacing(5)
+        lay.addWidget(self.crumbs)
 
         self.blist = QtWidgets.QListWidget()
-        # miniatura grande com o nome embaixo, uma por linha (como no original)
-        self.blist.setViewMode(QtWidgets.QListView.IconMode)
-        self.blist.setFlow(QtWidgets.QListView.TopToBottom)
-        self.blist.setWrapping(False)
-        self.blist.setMovement(QtWidgets.QListView.Static)
-        self.blist.setIconSize(QtCore.QSize(220, 124))
-        self.blist.setGridSize(QtCore.QSize(236, 150))
+        self.blist.setObjectName('blist')
+        self.blist.setItemDelegate(ThumbDelegate(self))
+        self.blist.setVerticalScrollMode(QtWidgets.QAbstractItemView.ScrollPerPixel)
+        self.blist.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
         self.blist.setUniformItemSizes(True)
         self.blist.itemClicked.connect(self._browser_click)
         self.blist.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
         self.blist.customContextMenuRequested.connect(self._browser_menu)
+        self.blist.viewport().installEventFilter(self._make_resize_watch())
         lay.addWidget(self.blist, 1)
         self.browser_items = {}
-        self._fill_folders()
-        self._objects_mode('basic', switch=False)
         self._browser_mode('browser')
         return frame
 
+    def _make_resize_watch(self):
+        win = self
+
+        class Watch(QtCore.QObject):
+            def eventFilter(self, obj, ev):
+                if ev.type() == QtCore.QEvent.Resize:
+                    # miniatura na largura do painel, em 16:9
+                    w = max(120, obj.width() - 14)
+                    h = int(w * 9 / 16)
+                    if (w, h) != win.thumb_size:
+                        win.thumb_size = (w, h)
+                        win.blist.doItemsLayout()
+                return False
+        self._watch = Watch(self)
+        return self._watch
+
     def _browser_mode(self, mode):
         self.mode = mode
-        self.tab_objects.setChecked(mode == 'objects')
-        self.tab_browser.setChecked(mode == 'browser')
-        for w in (self.show_label, self.show_basic, self.show_custom):
-            w.setVisible(mode == 'objects')
-        self.folder_combo.setVisible(mode == 'browser')
-        if mode == 'browser':
-            self._fill_presets()
-        else:
-            self._fill_objects()
+        self.tab_objects.setObjectName('tabOn' if mode == 'objects' else 'tabOff')
+        self.tab_browser.setObjectName('tabOn' if mode == 'browser' else 'tabOff')
+        for b in (self.tab_objects, self.tab_browser):
+            b.style().unpolish(b)
+            b.style().polish(b)
+        self._fill_browser()
 
-    def _objects_mode(self, which, switch=True):
-        self.obj_mode = which
-        self.show_basic.setChecked(which == 'basic')
-        self.show_custom.setChecked(which == 'custom')
-        if switch:
-            self._fill_objects()
+    def _set_crumbs(self, widgets):
+        while self.crumbs_lay.count():
+            it = self.crumbs_lay.takeAt(0)
+            if it.widget():
+                it.widget().deleteLater()
+        for w in widgets:
+            self.crumbs_lay.addWidget(w)
+        self.crumbs_lay.addStretch(1)
 
-    def _fill_folders(self):
+    def _crumb(self, text, fn):
+        b = QtWidgets.QPushButton(text)
+        b.setObjectName('crumb')
+        b.clicked.connect(fn)
+        return b
+
+    def _fill_browser(self):
+        self.worker.clear_queue('browse:')
+        self.blist.clear()
+        self.browser_items = {}
+        if self.mode == 'objects':
+            show = _label('Show', 'plab')
+            basic = QtWidgets.QPushButton('Basic')
+            basic.setObjectName('segl')
+            custom = QtWidgets.QPushButton('Custom')
+            custom.setObjectName('segr')
+            for b, m in ((basic, 'basic'), (custom, 'custom')):
+                b.setCheckable(True)
+                b.setChecked(self.obj_mode == m)
+                b.clicked.connect(lambda _c=False, m=m: self._objects_mode(m))
+            self._set_crumbs([show, basic, custom])
+            self._fill_objects()
+            return
+        # trilha de pastas: Presets > Pro Presets > ...
+        parts = [x for x in self.browse_rel.split('/') if x]
+        widgets = [self._crumb('Presets', lambda: self._go(''))]
+        for i, part in enumerate(parts):
+            sep = _label(u'▸', 'crumbSep')
+            widgets.append(sep)
+            rel = '/'.join(parts[:i + 1])
+            widgets.append(self._crumb(part, lambda _c=False, rel=rel: self._go(rel)))
+        self._set_crumbs(widgets)
         root = fb.presets_root()
-        self.folder_combo.blockSignals(True)
-        self.folder_combo.clear()
-        self.folder_combo.addItem('Todos os presets', '')
-        for dp, dirs, files in os.walk(root):
-            dirs.sort(key=lambda d: ('custom' in d.lower(), d.lower()))
-            rel = os.path.relpath(dp, root).replace('\\', '/')
-            if rel != '.':
-                self.folder_combo.addItem(rel.replace('/', ' > '), rel)
-        self.folder_combo.blockSignals(False)
+        base = root + ('/' + self.browse_rel if self.browse_rel else '')
+        try:
+            entries = os.listdir(base)
+        except OSError:
+            entries = []
+        folders = sorted((e for e in entries if os.path.isdir(os.path.join(base, e))),
+                         key=lambda d: ('custom' in d.lower(), d.lower()))
+        files = sorted((e for e in entries if e.lower().endswith('.ofp')), key=str.lower)
+        for d in folders:
+            rel = (self.browse_rel + '/' + d) if self.browse_rel else d
+            it = QtWidgets.QListWidgetItem(QtGui.QIcon(_folder_pixmap(220, 124, d)), d)
+            it.setData(QtCore.Qt.UserRole, ('folder', rel))
+            self.blist.addItem(it)
+        ph = self._placeholder()
+        for f in files:
+            p = (base + '/' + f).replace('\\', '/')
+            it = QtWidgets.QListWidgetItem(ph, os.path.splitext(f)[0])
+            it.setData(QtCore.Qt.UserRole, ('preset', p))
+            self.blist.addItem(it)
+            self.browser_items[p] = it
+            self.worker.add(('browse:' + p, lambda p=p: self._thumb_file(p)))
+
+    def _go(self, rel):
+        self.browse_rel = rel
+        self._fill_browser()
+
+    def _objects_mode(self, which):
+        self.obj_mode = which
+        self._fill_browser()
+
+    def _placeholder(self):
+        pm = QtGui.QPixmap(220, 124)
+        pm.fill(QtGui.QColor(10, 10, 10))
+        return QtGui.QIcon(pm)
 
     def _list_presets(self, rel):
         root = fb.presets_root()
@@ -1037,32 +1293,14 @@ class OptionsWindow(QtWidgets.QDialog):
             out += [os.path.join(dp, f).replace('\\', '/') for f in sorted(files) if f.lower().endswith('.ofp')]
         return out
 
-    def _placeholder(self):
-        pm = QtGui.QPixmap(220, 124)
-        pm.fill(QtGui.QColor(10, 10, 10))
-        return QtGui.QIcon(pm)
-
-    def _fill_presets(self):
-        self.worker.clear_queue('browse:')
-        self.blist.clear()
-        self.browser_items = {}
-        rel = self.folder_combo.currentData() or ''
-        icon = self._placeholder()
-        for p in self._list_presets(rel):
-            it = QtWidgets.QListWidgetItem(icon, os.path.splitext(os.path.basename(p))[0])
-            it.setData(QtCore.Qt.UserRole, ('preset', p))
-            self.blist.addItem(it)
-            self.browser_items[p] = it
-            self.worker.add(('browse:' + p, lambda p=p: self._thumb_file(p)))
-
     def _thumb_file(self, path):
-        cache = fb._cache_file(path, 220, 124)
+        cache = fb._cache_file(path, 320, 180)
         if os.path.isfile(cache):
             return QtGui.QImage(cache)
-        raw, n = self.renderer.render(path, 220, 124)
+        raw, n = self.renderer.render(path, 320, 180)
         if raw is None:
             return None
-        img = _image(raw, 220, 124)
+        img = _image(raw, 320, 180)
         img.save(cache, 'PNG')
         return img
 
@@ -1086,34 +1324,30 @@ class OptionsWindow(QtWidgets.QDialog):
         return self._basic_cache
 
     def _fill_objects(self):
-        self.worker.clear_queue('browse:')
-        self.blist.clear()
-        self.browser_items = {}
-        icon = self._placeholder()
+        ph = self._placeholder()
         if self.obj_mode == 'basic':
             for t, (pre, o) in self._basic_objects():
                 one = ofp.Preset()
                 one.globals = pre.globals
                 one.has_globals = pre.has_globals
-                import copy
                 obj = copy.deepcopy(o)
                 obj.name = ofp.TYPE_NAMES[t]
                 obj.hidden = obj.solo = False
                 one.objects = [obj]
                 data = ofp.serialize(one)
                 key = 'obj:%d' % t
-                it = QtWidgets.QListWidgetItem(icon, ofp.TYPE_NAMES[t])
+                it = QtWidgets.QListWidgetItem(ph, ofp.TYPE_NAMES[t])
                 it.setData(QtCore.Qt.UserRole, ('objects', data))
                 self.blist.addItem(it)
                 self.browser_items[key] = it
 
                 def job(data=data):
-                    raw = self.renderer.render_mem(data, 220, 124, [0.35, 0.6], [0.5, 0.5])
-                    return _image(raw, 220, 124) if raw else None
+                    raw = self.renderer.render_mem(data, 320, 180, [0.35, 0.6], [0.5, 0.5])
+                    return _image(raw, 320, 180) if raw else None
                 self.worker.add(('browse:' + key, job))
         else:
             for p in self._list_presets('Custom Objects') or self._list_presets(''):
-                it = QtWidgets.QListWidgetItem(icon, os.path.splitext(os.path.basename(p))[0])
+                it = QtWidgets.QListWidgetItem(ph, os.path.splitext(os.path.basename(p))[0])
                 it.setData(QtCore.Qt.UserRole, ('objfile', p))
                 self.blist.addItem(it)
                 self.browser_items[p] = it
@@ -1121,7 +1355,9 @@ class OptionsWindow(QtWidgets.QDialog):
 
     def _browser_click(self, item):
         kind, ref = item.data(QtCore.Qt.UserRole)
-        if kind == 'preset':
+        if kind == 'folder':
+            self._go(ref)
+        elif kind == 'preset':
             self._load_preset(ref)
         elif kind == 'objects':
             self._add_objects(ofp.parse(ref).objects)
@@ -1137,13 +1373,13 @@ class OptionsWindow(QtWidgets.QDialog):
         if kind == 'preset':
             m.addAction('Load', lambda: self._load_preset(ref))
             m.addAction('Combine With Current', lambda: self._add_objects(ofp.load(ref).objects))
+        elif kind == 'folder':
+            m.addAction('Open', lambda: self._go(ref))
         else:
             m.addAction('Add To Stack', lambda: self._browser_click(item))
-        gpos = self.blist.viewport().mapToGlobal(pos)
-        m.exec_(gpos) if hasattr(m, 'exec_') else m.exec(gpos)
+        _exec(m, self.blist.viewport().mapToGlobal(pos))
 
     def _add_objects(self, objs):
-        import copy
         for o in objs:
             self.preset.objects.append(copy.deepcopy(o))
         self.sel = len(self.preset.objects) - 1
@@ -1164,12 +1400,13 @@ class OptionsWindow(QtWidgets.QDialog):
         self._refresh_all()
 
     def _load_preset_dialog(self):
-        path, _ = QtWidgets.QFileDialog.getOpenFileName(self, 'Load Preset', fb.presets_root(), 'Optical Flares (*.ofp)')
+        path, _ = QtWidgets.QFileDialog.getOpenFileName(self, 'Load Preset', fb.presets_root(),
+                                                        'Optical Flares (*.ofp)')
         if path:
             self._load_preset(path)
 
     def _save_preset(self):
-        start = os.path.join(fb.presets_root(), (self.preset_name or 'Meu Flare') + '.ofp')
+        start = os.path.join(fb.presets_root(), self.browse_rel, (self.preset_name or 'Meu Flare') + '.ofp')
         path, _ = QtWidgets.QFileDialog.getSaveFileName(self, 'Save Preset', start, 'Optical Flares (*.ofp)')
         if not path:
             return
@@ -1178,8 +1415,7 @@ class OptionsWindow(QtWidgets.QDialog):
         self.preset_name = os.path.splitext(os.path.basename(path))[0]
         self.preset_path = path
         if self.mode == 'browser':
-            self._fill_folders()
-            self._fill_presets()
+            self._fill_browser()
 
     # ------------------------------------------------------------------ imagens prontas
     def _on_image(self, key, img):
@@ -1191,7 +1427,8 @@ class OptionsWindow(QtWidgets.QDialog):
                 lx, ly = self.light[0] * pm.width(), (1 - self.light[1]) * pm.height()
                 cx, cy = self.center[0] * pm.width(), (1 - self.center[1]) * pm.height()
                 p.drawLine(QtCore.QPointF(lx, ly), QtCore.QPointF(2 * cx - lx, 2 * cy - ly))
-                p.drawEllipse(QtCore.QPointF(cx, cy), 4, 4)
+                p.drawLine(QtCore.QPointF(cx - 6, cy), QtCore.QPointF(cx + 6, cy))
+                p.drawLine(QtCore.QPointF(cx, cy - 6), QtCore.QPointF(cx, cy + 6))
                 p.end()
             self.preview.setPixmap(pm)
         elif key == 'stack:global':
@@ -1215,12 +1452,11 @@ class OptionsWindow(QtWidgets.QDialog):
             return
         nuke.Undo.begin('Optical Flares: Options')
         try:
-            node['renderOptions'].setValue(ofp.encode_state(data))
-            if 'ofpPresetName' in node.knobs():
-                node['ofpPresetName'].setValue(self.preset_name or node['ofpPresetName'].value())
-            if getattr(self, 'preset_path', None) and 'ofpPresetFile' in node.knobs():
+            if self.preset_path and 'ofpPresetFile' in node.knobs():
                 node['ofpPresetFile'].setValue(self.preset_path)
-                node['renderOptions'].setValue(ofp.encode_state(data))  # edicoes valem sobre o arquivo
+            node['renderOptions'].setValue(ofp.encode_state(data))  # as edicoes valem sobre o arquivo
+            if 'ofpPresetName' in node.knobs() and self.preset_name:
+                node['ofpPresetName'].setValue(self.preset_name)
         finally:
             nuke.Undo.end()
         self.accept()
@@ -1263,6 +1499,8 @@ if __name__ == '__main__':
         args.remove(shot)
     data = open(args[0], 'rb').read() if args else None
     w = OptionsWindow(None, data)
+    if os.environ.get('OFNDK_SHOT_BROWSE'):
+        w._go(os.environ['OFNDK_SHOT_BROWSE'])
     w.show()
     if shot:
         def grab():
