@@ -2,6 +2,7 @@
 // Comportamento descrito em docs/03-comportamento-render.md; codigo escrito do zero.
 #pragma once
 
+#include <string>
 #include <vector>
 
 #include "OfpPreset.h"
@@ -29,11 +30,15 @@ struct RenderSettings {
     float aspectRatio = 1.0f;  // knob AspectRatio
     int colorMode = 0;         // 0 Tint, 1 Multiply
     int soloFlareId = -1;      // knob SoloFlareID
+    float evolution = 0.0f;    // knob AnimationEvolution
+    // pasta "Optical Flares Textures" (contem Elements/ e Glass/)
+    std::string textureRoot;
 };
 
 struct RenderStats {
     int objectsDrawn = 0;
-    int objectsSkipped = 0;  // tipos ainda nao implementados
+    int objectsSkipped = 0;
+    int texturesMissing = 0;
 };
 
 // Buffer RGBA float de width*height pixels; linha 0 = topo da imagem

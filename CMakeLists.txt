@@ -11,8 +11,11 @@ endif()
 add_library(ofcore STATIC
     src/OfpPreset.cpp
     src/FlareRenderer.cpp
+    src/TextureCache.cpp
 )
 target_include_directories(ofcore PUBLIC src)
+# texturas lidas com o WIC do Windows
+target_link_libraries(ofcore PUBLIC windowscodecs ole32)
 if(MSVC)
     target_compile_definitions(ofcore PRIVATE _CRT_SECURE_NO_WARNINGS)
 endif()

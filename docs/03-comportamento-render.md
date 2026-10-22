@@ -303,3 +303,35 @@ mudar o resultado, porque cada pixel é independente.
 - Constantes empíricas (0,002, 0,08, 12, 0,0002, 0,03…) foram lidas do código e podem ter
   arredondamento na decompilação; conferir com renders.
 - Modos Track Lights, Mask e Luminance do Source Type.
+
+## 12. Estado da implementação (2026-10-21)
+
+Implementado em `src/FlareRenderer.cpp` (renderizador em CPU) e `src/OpticalFlares.cpp` (nó):
+
+- Os 12 tipos de elemento, preparação comum (posição, escala, cor, gradiente/espectro), Dynamic
+  Triggering, Matte Box, Colorize por luz, Blend Mode = Screen, Lens Texture (Glass), aberração
+  cromática, saturação/contraste. Texturas lidas com o WIC do Windows, com mipmaps.
+- Flicker por elemento: `fase = Animation Evolution · 10` quando Enable (id 110) está ligado. O
+  termo `Speed (id 108) · 0,05 · tempo` do original recebe tempo 0 no Nuke, então só a Animation
+  Evolution anima.
+- Oclusão 2D: média num quadrado de ±`LightRadius` (máx. 64 px) em volta da luz; alfa médio `a` e
+  cor média pré-multiplicada. Fator: Alpha `1 − a`, Alpha Invert `a`, Luma `1 − a·luma`,
+  Luma Invert `a·luma` (luma = 0,3R + 0,59G + 0,11B). Brilho da luz ×= fator; Sample Color mistura a
+  cor da luz com a amostrada pelo mesmo fator.
+- Show Foreground: `saída = k·matte + (1 − k)·saída`, `k` = alfa da matte quando o alfa é pedido,
+  senão 1.
+- Rasterização: o original cobre a linha `r` quando `r + 0,25` cai dentro do triângulo; a largura da
+  linha é medida nesse mesmo ponto (medir em `r` deixava buraco em raios exatamente horizontais).
+
+Reconstruído ou incerto (confere visualmente, sem render de referência):
+
+- Hoop: orientação do arco e as duas variantes (tira com espectro e quads) foram montadas a partir
+  do desenho dos vértices; o original usa a variante tira em 128 de 142 presets.
+- Argumentos dos shaders do Sparkle e do Spike Ball (quais atributos entram em cada termo).
+- Orientação da textura no Iris com textura.
+- Grupo Flicker do nó (Type, Speed, Amount, Randomize, Random Seed): o nó original preenche vetores
+  de brilho/cor por luz que não achei sendo calculados na versão Nuke; aqui os knobs existem mas não
+  alteram o render.
+- 3D (luzes da cena e câmera, oclusão por profundidade): ainda não implementado.
+- Texturas citadas por presets antigos que não existem na pasta Elements ("Sharp Disc",
+  "Textured Circle", "Grainy Lens", "Crecent Moon", "Pentagon", "Specks"): o elemento é pulado.

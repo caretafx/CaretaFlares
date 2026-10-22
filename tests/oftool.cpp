@@ -3,7 +3,7 @@
 //   oftool scan PASTA
 //       le todos os .ofp, confere o parser e o ida-e-volta do estado hex.
 //   oftool render PRESET.ofp LARGURA ALTURA LUZ_X LUZ_Y SAIDA.ppm [CENTRO_X CENTRO_Y]
-//       renderiza o flare (so os elementos implementados) num PPM 8 bits,
+//       renderiza o flare num PPM 8 bits,
 //       em espaco de display (o mesmo que o viewer mostraria com gama 2,2).
 #include <cstdio>
 #include <cstdlib>
@@ -60,6 +60,12 @@ static int render(int argc, char** argv)
     st.height = std::atoi(argv[4]);
     st.centerX = argc > 9 ? float(std::atof(argv[8])) : st.width * 0.5f;
     st.centerY = argc > 9 ? float(std::atof(argv[9])) : st.height * 0.5f;
+    {
+        const char* t = std::getenv("OPTICAL_FLARES_TEXTURE_PATH");
+        const char* h = std::getenv("USERPROFILE");
+        st.textureRoot = t ? std::string(t) : std::string(h ? h : "") + "/.nuke/OpticalFlares/Optical Flares Textures";
+    }
+    if (const char* solo = std::getenv("OF_SOLO")) st.soloFlareId = std::atoi(solo);
     Light l;
     l.x = float(std::atof(argv[5]));
     l.y = float(std::atof(argv[6]));
@@ -77,8 +83,8 @@ static int render(int argc, char** argv)
             std::fputc(int(v * 255.0f + 0.5f), fh);
         }
     std::fclose(fh);
-    std::printf("%d objetos desenhados, %d ignorados (tipos ainda nao implementados)\n", stats.objectsDrawn,
-                stats.objectsSkipped);
+    std::printf("%d objetos desenhados, %d ignorados, %d texturas faltando\n", stats.objectsDrawn,
+                stats.objectsSkipped, stats.texturesMissing);
     return 0;
 }
 

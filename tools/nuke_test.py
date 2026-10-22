@@ -85,7 +85,8 @@ def _of_run():
         'OPTICAL_FLARES_PRESET_PATH',
         os.path.expanduser('~/.nuke/OpticalFlares/Optical Flares Presets'),
     ).replace('\\', '/')
-    preset = presets + '/Custom Objects/Hot Glow.ofp'
+    # troque o nome para testar outro preset (OF_TEST_PRESET tambem funciona)
+    preset = presets + '/' + os.environ.get('OF_TEST_PRESET', 'Natural Light') + '.ofp'
     _of_log('preset: %s (existe=%s)' % (preset, os.path.isfile(preset)))
     node['ofpPresetFile'].setValue(preset)
     _of_log('renderOptions: %d caracteres' % len(node['renderOptions'].value()))
@@ -94,7 +95,7 @@ def _of_run():
     try:
         x, y = fmt.width() * 0.3, fmt.height() * 0.6
         rgb = [node.sample(c, x, y) for c in ('rgba.red', 'rgba.green', 'rgba.blue')]
-        _of_log('pixel no glow: %s' % rgb)
+        _of_log('pixel na luz: %s' % rgb)
     except Exception as exc:
         _of_log('sample falhou: %r' % (exc,))
     viewers = nuke.allNodes('Viewer')

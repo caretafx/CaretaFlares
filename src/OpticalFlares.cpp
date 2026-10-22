@@ -6,6 +6,7 @@
 // e desenha os objetos ja implementados (por enquanto so o Glow).
 
 #include <cmath>
+#include <cstdlib>
 #include <memory>
 #include <sstream>
 #include <string>
@@ -407,6 +408,64 @@ void OpticalFlares::_validate(bool forReal)
 void OpticalFlares::_request(int x, int y, int r, int t, ChannelMask channels, int count)
 {
     input0().request(x, y, r, t, channels, count);
+    // a matte e lida em volta de cada luz (oclusao 2D) e por cima (Show Foreground)
+    if ((enable2DOcclusion_ || showForeground_) && inputConnected(1)) {
+        if (Iop* matte = dynamic_cast<Iop*>(Op::input(1))) {
+            const Format& f = info_.format();
+            matte->request(f.x(), f.y(), f.r(), f.t(), Mask_RGBA, count);
+        }
+    }
+}
+
+// Media da matte num quadrado de +-raio (max. 64 px) em volta da luz, como o
+// original: alfa medio e cor media pre-multiplicada pelo alfa.
+static void sampleMatte(Iop& matte, int cx, int cy, int radius, float& alpha, float rgb[3])
+{
+    radius = std::max(1, std::min(radius, 64));
+    const Box& b = matte.info();
+    const int x0 = std::max(cx - radius, b.x()), x1 = std::min(cx + radius, b.r());
+    const int y0 = std::max(cy - radius, b.y()), y1 = std::min(cy + radius, b.t());
+    double sa = 0, sr = 0, sg = 0, sb = 0;
+    int n = 0;
+    if (x0 < x1) {
+        Row row(x0, x1);
+        for (int y = y0; y < y1; ++y) {
+            row.get(matte, y, x0, x1, Mask_RGBA);
+            const float* a = row[Chan_Alpha];
+            const float* r = row[Chan_Red];
+            const float* g = row[Chan_Green];
+            const float* bl = row[Chan_Blue];
+            for (int x = x0; x < x1; ++x) {
+                const float w = a ? a[x] : 0.0f;
+                sa += w;
+                sr += w * (r ? r[x] : 0.0f);
+                sg += w * (g ? g[x] : 0.0f);
+                sb += w * (bl ? bl[x] : 0.0f);
+                ++n;
+            }
+        }
+    }
+    n = std::max(n, 1);
+    alpha = float(sa / n);
+    rgb[0] = float(sr / n);
+    rgb[1] = float(sg / n);
+    rgb[2] = float(sb / n);
+}
+
+// Pasta "Optical Flares Textures" da instalacao do usuario (Elements/ e Glass/).
+static std::string textureRoot()
+{
+    auto env = [](const char* name) -> std::string {
+        const char* v = std::getenv(name);
+        return (v && *v) ? std::string(v) : std::string();
+    };
+    std::string p = env("OPTICAL_FLARES_TEXTURE_PATH");
+    if (!p.empty()) return p;
+    p = env("OPTICAL_FLARES_PATH");
+    if (!p.empty()) return p + "/Optical Flares Textures";
+    std::string home = env("USERPROFILE");
+    if (home.empty()) home = env("HOME");
+    return home + "/.nuke/OpticalFlares/Optical Flares Textures";
 }
 
 void OpticalFlares::ensureRendered()
@@ -432,6 +491,10 @@ void OpticalFlares::ensureRendered()
     st.aspectRatio = aspectRatio_;
     st.colorMode = colorMode_;
     st.soloFlareId = soloFlareId_;
+    st.evolution = float(animationEvolution_);
+    st.textureRoot = textureRoot();
+
+    Iop* matte = (enable2DOcclusion_ && inputConnected(1)) ? dynamic_cast<Iop*>(Op::input(1)) : nullptr;
 
     std::vector<ofndk::Light> lights;
     const int n = std::max(0, std::min(count_, kMaxExtraLights));
@@ -443,6 +506,22 @@ void OpticalFlares::ensureRendered()
         l.brightness = lightBrightness_[i];
         l.scale = lightScale_[i];
         for (int c = 0; c < 3; ++c) l.color[c] = color_[c];
+        if (matte) {
+            // 2D Matte Occlusion: Alpha / Alpha Invert / Luma / Luma Invert
+            float a = 0.0f, rgb[3];
+            sampleMatte(*matte, int(std::floor(p[0])), int(std::floor(p[1])), lightRadius_, a, rgb);
+            const float luma = rgb[0] * 0.3f + rgb[1] * 0.59f + rgb[2] * 0.11f;
+            float k;
+            switch (sampleMethod_) {
+            case 0: k = 1.0f - a; break;
+            case 1: k = a; break;
+            case 2: k = 1.0f - a * luma; break;
+            default: k = a * luma; break;
+            }
+            l.brightness *= k;
+            if (sampleColor_)
+                for (int c = 0; c < 3; ++c) l.color[c] = k * rgb[c] + (1.0f - k) * l.color[c];
+        }
         lights.push_back(l);
     }
 
@@ -491,6 +570,25 @@ void OpticalFlares::engine(int y, int x, int r, ChannelMask channels, Row& out)
                 }
             }
             dst[X] = base + v;
+        }
+    }
+
+    // Show Foreground: a matte vai por cima (peso = alfa da matte quando o alfa e pedido)
+    if (showForeground_ && inputConnected(1)) {
+        Iop* matte = dynamic_cast<Iop*>(Op::input(1));
+        if (!matte) return;
+        Row m(x, r);
+        m.get(*matte, y, x, r, Mask_RGBA);
+        if (aborted()) return;
+        const float* ma = (channels & Mask_Alpha) ? m[Chan_Alpha] : nullptr;
+        foreach (z, channels) {
+            if (z != Chan_Red && z != Chan_Green && z != Chan_Blue && z != Chan_Alpha) continue;
+            const float* mz = m[z];
+            float* dst = out.writable(z);
+            for (int X = x; X < r; ++X) {
+                const float k = ma ? ma[X] : 1.0f;
+                dst[X] = k * (mz ? mz[X] : 0.0f) + (1.0f - k) * dst[X];
+            }
         }
     }
 }
