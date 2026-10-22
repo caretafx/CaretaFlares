@@ -335,3 +335,16 @@ Reconstruído ou incerto (confere visualmente, sem render de referência):
 - 3D (luzes da cena e câmera, oclusão por profundidade): ainda não implementado.
 - Texturas citadas por presets antigos que não existem na pasta Elements ("Sharp Disc",
   "Textured Circle", "Grainy Lens", "Crecent Moon", "Pentagon", "Specks"): o elemento é pulado.
+
+### Desempenho e browser (2026-10-21, segunda rodada)
+
+- O render divide o quadro em faixas de 16 linhas e usa todos os núcleos menos um (threads do
+  Windows; `OFNDK_THREADS` força outro número). Cada faixa refaz a geometria e desenha só nas suas
+  linhas, então o resultado é idêntico ao de um núcleo (conferido byte a byte nos 243 presets). A
+  aberração lê vizinhos e roda numa segunda passada. Em 2048×1556: 3 a 10 vezes mais rápido.
+- O knob `GPU` do original continua salvo no script, mas fica escondido: não há caminho de GPU.
+- O botão `Options` (mesmo nome do original) abre `ofndk_browser.py`, um browser em PySide
+  (PySide2 no Nuke 15, PySide6 no 17). As miniaturas vêm do `ofthumb.dll`, que usa o mesmo
+  renderizador sem depender do Nuke, e ficam em `%LOCALAPPDATA%/OpticalFlaresNDK/thumbs`. O
+  preview grande usa a posição da luz e do centro do nó. Aplicar grava `renderOptions`,
+  `ofpPresetName` e `ofpPresetFile` num único undo.

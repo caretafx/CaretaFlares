@@ -11,7 +11,15 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
+#include <functional>
+
+#define WIN32_LEAN_AND_MEAN
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
 
 #include "TextureCache.h"
 
@@ -1702,7 +1710,8 @@ struct LensLight {
     float x, y, bright;
 };
 
-void applyLensTexture(const Ctx& R, const std::vector<LensLight>& lights, float matte, float* buf)
+// Lens texture (Glass) nas linhas [y0, y1).
+void applyLensTexture(const Ctx& R, const std::vector<LensLight>& lights, float matte, float* buf, int y0, int y1)
 {
     const Preset& P = *R.preset;
     const Param* tp = P.globals.find(19);
@@ -1726,7 +1735,7 @@ void applyLensTexture(const Ctx& R, const std::vector<LensLight>& lights, float 
     const float expo = falloff * 3.0f + 0.2f;
     const float footprint = std::max(float(tex->width()) / (float(R.W) * scX), float(tex->height()) / (float(R.H) * scY));
     float tx[4];
-    for (int j = 0; j < R.H; ++j) {
+    for (int j = y0; j < y1; ++j) {
         const float fy = float(j) / float(R.H);
         const float v = (fy - 0.5f) * invY - offY;
         if (v < 0.0f || v > 1.0f) continue;
@@ -1750,7 +1759,7 @@ void applyLensTexture(const Ctx& R, const std::vector<LensLight>& lights, float 
     }
 }
 
-void sampleBilinear(const std::vector<float>& src, int W, int H, float x, float y, float out[3])
+void sampleBilinear(const float* src, int W, int H, float x, float y, float out[3])
 {
     const int x0 = int(std::floor(x)), y0 = int(std::floor(y));
     const float tx = x - float(x0), ty = y - float(y0);
@@ -1766,32 +1775,36 @@ void sampleBilinear(const std::vector<float>& src, int W, int H, float x, float 
     }
 }
 
-void applyAberration(const Ctx& R, float* buf)
+bool aberrationOn(const Preset& P)
+{
+    return P.globals.getInt(55, 0) != 0 && P.globals.getFloat(51, 0.0f) > 0.0f && P.globals.getFloat(84, 100.0f) > 0.0f;
+}
+
+// Aberracao cromatica nas linhas [y0, y1): le de "src" (copia da imagem inteira), escreve em buf.
+void applyAberration(const Ctx& R, const float* src, float* buf, int y0, int y1)
 {
     const Preset& P = *R.preset;
     const int type = P.globals.getInt(55, 0);
     const float intensity = P.globals.getFloat(51, 0.0f) * 0.01f;
     const float spread = P.globals.getFloat(84, 100.0f) * 0.01f;
-    if (type == 0 || !(intensity > 0.0f) || !(spread > 0.0f)) return;
     const int W = R.W, H = R.H;
-    std::vector<float> copy(buf, buf + size_t(W) * H * 4);
     const float k2 = intensity * 2.0f;
     const float hx = float(W) * 0.5f, hy = float(H) * 0.5f;
     const float sx = float(W) * 0.002f * spread, sy = float(H) * 0.002f * spread;
     float s[3];
-    for (int j = 0; j < H; ++j) {
+    for (int j = y0; j < y1; ++j) {
         const float ky = ((float(j) - hy) / hy) * sy;
         for (int i = 0; i < W; ++i) {
             const float kx = ((float(i) - hx) / hx) * sx;
             float* p = buf + (size_t(j) * W + i) * 4;
-            const float* o = copy.data() + (size_t(j) * W + i) * 4;
+            const float* o = src + (size_t(j) * W + i) * 4;
             if (type == 2) {
-                sampleBilinear(copy, W, H, float(i) - 2.0f * kx, float(j) - 2.0f * ky, s);
+                sampleBilinear(src, W, H, float(i) - 2.0f * kx, float(j) - 2.0f * ky, s);
                 p[2] = std::max(0.0f, (s[2] - o[2]) * k2 + s[2]);
-                sampleBilinear(copy, W, H, float(i) - kx, float(j) - ky, s);
+                sampleBilinear(src, W, H, float(i) - kx, float(j) - ky, s);
                 p[1] = std::max(0.0f, (s[1] - o[1]) * k2 + s[1]);
             } else {
-                sampleBilinear(copy, W, H, float(i) - kx, float(j) - ky, s);
+                sampleBilinear(src, W, H, float(i) - kx, float(j) - ky, s);
                 p[0] = std::max(0.0f, (s[0] - o[0]) * k2 + o[0]);
                 p[2] = std::max(0.0f, (s[2] - o[2]) * k2 * 0.5f + o[2]);
             }
@@ -1825,6 +1838,54 @@ void applyColorCorrection(const Preset& preset, float* buf, size_t pixels)
     }
 }
 
+// ------------------------------------------------------------- varios nucleos
+// Threads do Windows direto (sem std::thread/std::mutex: o Nuke traz uma runtime C++
+// mais antiga). O quadro e dividido em faixas de linhas; cada thread pega a proxima
+// faixa livre. Cada pixel so depende da propria faixa, entao o resultado e identico.
+int workerCount()
+{
+    if (const char* env = std::getenv("OFNDK_THREADS")) {
+        const int n = std::atoi(env);
+        if (n > 0) return std::min(n, 64);
+    }
+    const int cores = int(GetActiveProcessorCount(ALL_PROCESSOR_GROUPS));
+    return std::max(1, std::min(cores - 1, 32));  // deixa um nucleo livre para o resto da maquina
+}
+
+struct BandJob {
+    const std::function<void(int, int)>* fn = nullptr;
+    volatile LONG next = 0;
+    int height = 0, band = 1;
+};
+
+DWORD WINAPI bandWorker(LPVOID arg)
+{
+    BandJob& job = *static_cast<BandJob*>(arg);
+    for (;;) {
+        const LONG b = InterlockedIncrement(&job.next) - 1;
+        const int y0 = int(b) * job.band;
+        if (y0 >= job.height) break;
+        (*job.fn)(y0, std::min(job.height, y0 + job.band));
+    }
+    return 0;
+}
+
+void parallelBands(int height, int band, const std::function<void(int, int)>& fn)
+{
+    BandJob job;
+    job.fn = &fn;
+    job.height = height;
+    job.band = std::max(1, band);
+    const int bands = (height + job.band - 1) / job.band;
+    const int threads = std::min(workerCount(), bands);
+    std::vector<HANDLE> handles;
+    for (int t = 1; t < threads; ++t)
+        if (HANDLE h = CreateThread(nullptr, 0, bandWorker, &job, 0, nullptr)) handles.push_back(h);
+    bandWorker(&job);  // a thread que chamou tambem trabalha
+    if (!handles.empty()) WaitForMultipleObjects(DWORD(handles.size()), handles.data(), TRUE, INFINITE);
+    for (HANDLE h : handles) CloseHandle(h);
+}
+
 }  // namespace
 
 void FlareRenderer::render(const Preset& preset, const RenderSettings& st, const std::vector<Light>& lights,
@@ -1836,98 +1897,134 @@ void FlareRenderer::render(const Preset& preset, const RenderSettings& st, const
     const size_t pixels = size_t(W) * size_t(H);
     RenderStats local;
 
-    Ctx R;
-    R.W = W;
-    R.H = H;
-    R.clip[2] = W;
-    R.clip[3] = H;
-    R.preset = &preset;
-    R.texRoot = st.textureRoot;
-    R.stats = &local;
-    R.aspectBase = (float(H) / float(W)) * st.aspectRatio;
-    R.scaleOffFlag = st.scaleOffset ? 1.0f : 0.0f;
-    R.rot = st.rotationDeg * kDeg;
-    R.multiply = st.colorMode == 1;
-    R.seed = int(preset.globals.getFloat(18, 5000.0f));
-    R.matteShape = preset.globals.getInt(36, 0);
-    R.matteStart = preset.globals.getFloat(37, 25.0f) * 0.01f;
-    R.matteFade = preset.globals.getFloat(38, 25.0f) * 0.01f;
-    R.evolution = st.evolution * 10.0f;
-    R.g112 = preset.globals.getFloat(112, 100.0f) * 0.01f;
-    R.g8 = preset.globals.getFloat(8, 1.0f);
-    preset.globals.getColor(4, R.globalColor, 126.0f / 255.0f, 146.0f / 255.0f, 180.0f / 255.0f);
+    Ctx base;
+    base.W = W;
+    base.H = H;
+    base.clip[2] = W;
+    base.clip[3] = H;
+    base.preset = &preset;
+    base.texRoot = st.textureRoot;
+    base.aspectBase = (float(H) / float(W)) * st.aspectRatio;
+    base.scaleOffFlag = st.scaleOffset ? 1.0f : 0.0f;
+    base.rot = st.rotationDeg * kDeg;
+    base.multiply = st.colorMode == 1;
+    base.seed = int(preset.globals.getFloat(18, 5000.0f));
+    base.matteShape = preset.globals.getInt(36, 0);
+    base.matteStart = preset.globals.getFloat(37, 25.0f) * 0.01f;
+    base.matteFade = preset.globals.getFloat(38, 25.0f) * 0.01f;
+    base.evolution = st.evolution * 10.0f;
+    base.g112 = preset.globals.getFloat(112, 100.0f) * 0.01f;
+    base.g8 = preset.globals.getFloat(8, 1.0f);
+    preset.globals.getColor(4, base.globalColor, 126.0f / 255.0f, 146.0f / 255.0f, 180.0f / 255.0f);
 
     bool anySolo = false;
     for (const FlareObject& o : preset.objects) anySolo = anySolo || o.solo;
 
-    std::vector<float> lightBuf;
+    // parametros de cada luz, calculados uma vez
+    struct LightCtx {
+        float lightX, lightY, centerX, centerY, bright, scale, color[3];
+        float colorize, colorizeColor[3];
+    };
+    std::vector<LightCtx> lc;
     std::vector<LensLight> lensLights;
     float lastMatte = 1.0f;
-
+    bool anyColorize = false;
     for (const Light& light : lights) {
-        R.lightX = light.x / float(W);
-        R.lightY = 1.0f - light.y / float(H);
-        R.centerX = st.centerX / float(W);
-        R.centerY = 1.0f - st.centerY / float(H);
+        LightCtx c{};
+        c.lightX = light.x / float(W);
+        c.lightY = 1.0f - light.y / float(H);
+        c.centerX = st.centerX / float(W);
+        c.centerY = 1.0f - st.centerY / float(H);
         float b = st.brightness * light.brightness;
         if (b > 1.0f) b = b * 0.7f + 0.3f;
-        R.bright = (preset.globals.getFloat(0, 0.0f) * 0.01f + 1.0f) * b;
-        R.scale = st.scale * light.scale;
-        for (int k = 0; k < 3; ++k) R.lightColor[k] = std::min(1.0f, std::max(0.0f, light.color[k]));
-
-        float colorize = 0.0f, colorizeColor[3] = {0, 0, 0};
-        if (!R.multiply) {
+        c.bright = (preset.globals.getFloat(0, 0.0f) * 0.01f + 1.0f) * b;
+        c.scale = st.scale * light.scale;
+        for (int k = 0; k < 3; ++k) c.color[k] = std::min(1.0f, std::max(0.0f, light.color[k]));
+        if (!base.multiply) {
             float h, l, s;
-            rgbToHsl(R.lightColor, h, l, s);
-            hslToRgb(h, 0.5f, std::min(1.0f, l * 2.0f) * s, colorizeColor);
+            rgbToHsl(c.color, h, l, s);
+            hslToRgb(h, 0.5f, std::min(1.0f, l * 2.0f) * s, c.colorizeColor);
             const float s1 = std::min(1.0f, s);
-            float t = std::max(0.0f, l - s1 * 0.5f) / (1.0f - s1 * 0.5f);
-            colorize = std::min(1.0f, 2.0f * (1.0f - std::min(1.0f, t)));
+            const float t = std::max(0.0f, l - s1 * 0.5f) / (1.0f - s1 * 0.5f);
+            c.colorize = std::min(1.0f, 2.0f * (1.0f - std::min(1.0f, t)));
         }
-        R.buf = rgba.data();
-        if (colorize > 0.0f) {
-            lightBuf.assign(pixels * 4, 0.0f);
-            R.buf = lightBuf.data();
-        }
-        lensLights.push_back({R.lightX, R.lightY, R.bright});
-        lastMatte = matteBox(R, 0.0f);
-
-        for (size_t idx = 0; idx < preset.objects.size(); ++idx) {
-            const FlareObject& o = preset.objects[idx];
-            if (anySolo ? !o.solo : o.hidden) continue;
-            if (st.soloFlareId >= 0 && int(idx) != st.soloFlareId) continue;
-            bool drawn = true;
-            switch (o.type) {
-            case kGlow: drawGlow(R, o); break;
-            case kStreak: drawStreak(R, o); break;
-            case kMultiIris:
-            case kLensOrbs:
-            case kIris: drawIrisFamily(R, o); break;
-            case kShimmer: drawShimmer(R, o); break;
-            case kRing: drawRing(R, o); break;
-            case kHoop: drawHoop(R, o); break;
-            case kGlint: drawGlint(R, o); break;
-            case kSparkle: drawSparkle(R, o); break;
-            case kSpikeBall: drawSpikeBall(R, o); break;
-            case kCaustic: drawCaustic(R, o); break;
-            default: drawn = false; break;
-            }
-            if (drawn) ++local.objectsDrawn;
-            else ++local.objectsSkipped;
-        }
-        if (colorize > 0.0f) applyColorize(colorize, colorizeColor, lightBuf.data(), rgba.data(), pixels);
+        anyColorize = anyColorize || c.colorize > 0.0f;
+        lensLights.push_back({c.lightX, c.lightY, c.bright});
+        Ctx tmp = base;
+        tmp.lightX = c.lightX;
+        tmp.lightY = c.lightY;
+        lastMatte = matteBox(tmp, 0.0f);
+        lc.push_back(c);
     }
+    std::vector<float> lightBuf;
+    if (anyColorize) lightBuf.assign(pixels * 4, 0.0f);
 
-    // Blend Mode = Screen: curva logaritmica (0,6 * ln(2x + 1))
-    if (preset.globals.getInt(9, 0) == 1)
-        for (size_t n = 0; n < pixels * 4; ++n) {
-            const float v = std::max(0.0f, rgba[n]);
-            rgba[n] = 0.6f * std::log(2.0f * v + 1.0f);
+    const bool screen = preset.globals.getInt(9, 0) == 1;
+    const bool aberration = aberrationOn(preset);
+    const int band = 16;
+
+    // fase 1: elementos de todas as luzes, colorize, Screen e lens texture, por faixa
+    parallelBands(H, band, [&](int y0, int y1) {
+        Ctx R = base;
+        R.clip[1] = y0;
+        R.clip[3] = y1;
+        R.stats = (y0 == 0) ? &local : nullptr;  // conta uma vez so
+        const size_t off = size_t(y0) * size_t(W) * 4;
+        const size_t count = size_t(y1 - y0) * size_t(W);
+        for (const LightCtx& c : lc) {
+            R.lightX = c.lightX;
+            R.lightY = c.lightY;
+            R.centerX = c.centerX;
+            R.centerY = c.centerY;
+            R.bright = c.bright;
+            R.scale = c.scale;
+            std::copy(c.color, c.color + 3, R.lightColor);
+            R.buf = (c.colorize > 0.0f) ? lightBuf.data() : rgba.data();
+            for (size_t idx = 0; idx < preset.objects.size(); ++idx) {
+                const FlareObject& o = preset.objects[idx];
+                if (anySolo ? !o.solo : o.hidden) continue;
+                if (st.soloFlareId >= 0 && int(idx) != st.soloFlareId) continue;
+                bool drawn = true;
+                switch (o.type) {
+                case kGlow: drawGlow(R, o); break;
+                case kStreak: drawStreak(R, o); break;
+                case kMultiIris:
+                case kLensOrbs:
+                case kIris: drawIrisFamily(R, o); break;
+                case kShimmer: drawShimmer(R, o); break;
+                case kRing: drawRing(R, o); break;
+                case kHoop: drawHoop(R, o); break;
+                case kGlint: drawGlint(R, o); break;
+                case kSparkle: drawSparkle(R, o); break;
+                case kSpikeBall: drawSpikeBall(R, o); break;
+                case kCaustic: drawCaustic(R, o); break;
+                default: drawn = false; break;
+                }
+                if (R.stats) ++(drawn ? R.stats->objectsDrawn : R.stats->objectsSkipped);
+            }
+            if (c.colorize > 0.0f)
+                applyColorize(c.colorize, c.colorizeColor, lightBuf.data() + off, rgba.data() + off, count);
         }
-    R.buf = rgba.data();
-    applyLensTexture(R, lensLights, lastMatte, rgba.data());
-    applyAberration(R, rgba.data());
-    applyColorCorrection(preset, rgba.data(), pixels);
+        // Blend Mode = Screen: curva logaritmica (0,6 * ln(2x + 1))
+        if (screen)
+            for (size_t n = off; n < off + count * 4; ++n) {
+                const float v = std::max(0.0f, rgba[n]);
+                rgba[n] = 0.6f * std::log(2.0f * v + 1.0f);
+            }
+        R.buf = rgba.data();
+        applyLensTexture(R, lensLights, lastMatte, rgba.data(), y0, y1);
+        if (!aberration) applyColorCorrection(preset, rgba.data() + off, count);
+    });
+
+    // fase 2: aberracao (le vizinhos de outras faixas, entao vem depois) e correcao de cor
+    if (aberration) {
+        const std::vector<float> copy(rgba);
+        parallelBands(H, band, [&](int y0, int y1) {
+            Ctx R = base;
+            applyAberration(R, copy.data(), rgba.data(), y0, y1);
+            applyColorCorrection(preset, rgba.data() + size_t(y0) * size_t(W) * 4, size_t(y1 - y0) * size_t(W));
+        });
+    }
     if (stats) *stats = local;
 }
 

@@ -64,6 +64,25 @@ def _of_run():
         return
     _of_log('LoadLibrary ok')
 
+    # browser de presets: modulo do pacote + copia do ofthumb.dll (tambem nao trava o build)
+    import sys
+    pkg = _OF_ROOT + '/package'
+    if pkg not in sys.path:
+        sys.path.insert(0, pkg)
+    thumb = os.path.dirname(os.path.dirname(copy)) + '/ofthumb.dll'
+    if os.path.isfile(thumb):
+        thumb_copy = '%s/ofthumb_%d.dll' % (run_dir, int(time.time()))
+        shutil.copy2(thumb, thumb_copy)
+        os.environ['OFNDK_THUMB_DLL'] = thumb_copy
+        try:
+            import importlib
+            import ofndk_browser
+            importlib.reload(ofndk_browser)
+            ofndk_browser.THUMB_DLL = thumb_copy
+            _of_log('browser pronto (miniaturas: %s)' % thumb_copy)
+        except Exception as exc:
+            _of_log('browser falhou ao importar: %r' % (exc,))
+
     # 2) cria o no solto (sem ligar no que estiver selecionado) e mostra no viewer
     for sel in nuke.selectedNodes():
         sel.setSelected(False)

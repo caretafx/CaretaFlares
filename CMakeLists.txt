@@ -23,6 +23,10 @@ if(MSVC)
     target_compile_options(ofcore PRIVATE /W4 /fp:fast)
 endif()
 
+# Miniaturas para o browser de presets (Python/ctypes), sem dependencia do Nuke.
+add_library(ofthumb SHARED src/ThumbApi.cpp)
+target_link_libraries(ofthumb PRIVATE ofcore)
+
 # Ferramenta de teste (roda sem o Nuke).
 add_executable(oftool tests/oftool.cpp)
 target_link_libraries(oftool PRIVATE ofcore)

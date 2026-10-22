@@ -4,6 +4,14 @@
 #include <cstdio>
 #include <cstring>
 
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
+
 namespace ofndk {
 
 namespace {
@@ -223,7 +231,19 @@ bool parseOfp(const uint8_t* data, size_t size, Preset& out, std::string& error)
 bool loadOfpFile(const std::string& path, std::vector<uint8_t>& bytes, std::string& error)
 {
     bytes.clear();
+#ifdef _WIN32
+    // caminho em UTF-8 (Nuke e Python): abre pela API larga do Windows
+    std::wstring wpath;
+    if (const int len = MultiByteToWideChar(CP_UTF8, 0, path.c_str(), -1, nullptr, 0); len > 0) {
+        wpath.resize(size_t(len));
+        MultiByteToWideChar(CP_UTF8, 0, path.c_str(), -1, &wpath[0], len);
+        wpath.resize(size_t(len) - 1);
+    }
+    FILE* fh = wpath.empty() ? nullptr : _wfopen(wpath.c_str(), L"rb");
+    if (!fh) fh = std::fopen(path.c_str(), "rb");  // caminho ANSI antigo
+#else
     FILE* fh = std::fopen(path.c_str(), "rb");
+#endif
     if (!fh) {
         error = "nao foi possivel abrir " + path;
         return false;

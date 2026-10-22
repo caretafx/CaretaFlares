@@ -152,6 +152,7 @@ private:
 
     // knobs novos -----------------------------------------------------------
     const char* presetFile_ = nullptr;
+    std::string presetName_;
 
     // estado ----------------------------------------------------------------
     std::shared_ptr<const ofndk::Preset> preset_;
@@ -172,16 +173,18 @@ const Op::Description OpticalFlares::description(kClass, build);
 
 void OpticalFlares::knobs(Knob_Callback f)
 {
-    Button(f, "Options", "Options");
-    Tooltip(f, "Abre o editor de flares no plugin original. Ainda nao existe nesta versao; "
-               "use o knob 'Preset (.ofp)'.");
-
-    File_knob(f, &presetFile_, "ofpPresetFile", "Preset (.ofp)");
-    SetFlags(f, Knob::KNOB_CHANGED_ALWAYS);
-    Tooltip(f, "Carrega um preset .ofp da instalacao (por exemplo "
-               "~/.nuke/OpticalFlares/Optical Flares Presets). O conteudo e copiado para o "
-               "script, como no plugin original.");
-    Button(f, "ofpLoadPreset", "Recarregar");
+    // "Options" (mesmo nome do original) abre o browser de presets em Python
+    PyScript_knob(f,
+                  "import ofndk_browser\n"
+                  "ofndk_browser.open_browser(nuke.thisNode())",
+                  "Options", "  Preset Browser  ");
+    Tooltip(f, "Abre o browser de presets da instalacao, com miniaturas. "
+               "Duplo clique (ou OK) aplica o preset neste no.");
+    String_knob(f, &presetName_, "ofpPresetName", "");
+    ClearFlags(f, Knob::STARTLINE);
+    SetFlags(f, Knob::READ_ONLY | Knob::NO_RERENDER);
+    Tooltip(f, "Preset carregado. O conteudo fica salvo no script (renderOptions), "
+               "como no plugin original.");
     Divider(f);
 
     Format_knob(f, &format_, "Format", "Format");
@@ -215,10 +218,13 @@ void OpticalFlares::knobs(Knob_Callback f)
     }
     EndGroup(f);
 
+    Divider(f);
     Float_knob(f, &brightness_, "Brightness", "Brightness");
     SetFlags(f, Knob::STARTLINE);
+    SetRange(f, 0, 4);
     Float_knob(f, &scale_, "Scale", "Scale");
     SetFlags(f, Knob::STARTLINE);
+    SetRange(f, 0, 4);
     Bool_knob(f, &scaleOffset_, "ScaleOffset", "Scale Offset");
     Float_knob(f, &rotationOffset_, "RotationOffset", "Rotation Offset");
     SetFlags(f, Knob::STARTLINE);
@@ -229,6 +235,10 @@ void OpticalFlares::knobs(Knob_Callback f)
     SetFlags(f, Knob::STARTLINE);
     Float_knob(f, &animationEvolution_, "AnimationEvolution", "Animation Evolution");
     SetFlags(f, Knob::STARTLINE);
+    SetRange(f, 0, 10);
+    Tooltip(f, "Anima os elementos com Flicker ligado no preset (raios, faiscas, hoops). "
+               "Anime este valor para o flare tremular.");
+    Divider(f);
 
     BeginClosedGroup(f, "2DMatteOcclusion", "2D Matte Occlusion");
     Bool_knob(f, &enable2DOcclusion_, "Enable2DOcclusion", "Enable 2D Occlusion");
@@ -255,16 +265,19 @@ void OpticalFlares::knobs(Knob_Callback f)
     SetFlags(f, Knob::STARTLINE);
     EndGroup(f);
 
+    Divider(f);
     Float_knob(f, &aspectRatio_, "AspectRatio", "Aspect Ratio");
     SetFlags(f, Knob::STARTLINE);
+    SetRange(f, 0.25, 4);
     Enumeration_knob(f, &renderMode_, kRenderMode, "RenderMode", "Render Mode");
     SetFlags(f, Knob::STARTLINE);
     Enumeration_knob(f, &colorspace_, kColorspace, "Colorspace", "Colorspace");
     SetFlags(f, Knob::STARTLINE);
     Float_knob(f, &customGamma_, "CustomGamma", "Custom Gamma");
+    ClearFlags(f, Knob::STARTLINE);
+    // GPU existe no original; aqui o render e em CPU (varios nucleos), entao fica escondido
     Bool_knob(f, &gpu_, "GPU", "GPU");
-    SetFlags(f, Knob::STARTLINE);
-    Tooltip(f, "Mantido por compatibilidade; esta versao sempre renderiza em CPU.");
+    SetFlags(f, Knob::INVISIBLE);
 
     String_knob(f, &renderOptions_, "renderOptions");
     SetFlags(f, Knob::INVISIBLE | Knob::ALWAYS_SAVE);
@@ -291,6 +304,12 @@ void OpticalFlares::knobs(Knob_Callback f)
     Float_knob(f, &uiPreviewGamma_, "UIPreviewGamma", "UI Preview Gamma");
     Int_knob(f, &soloFlareId_, "SoloFlareID", "Solo Flare ID");
     SetFlags(f, Knob::STARTLINE);
+    Divider(f, "Preset por arquivo");
+    File_knob(f, &presetFile_, "ofpPresetFile", "Preset (.ofp)");
+    SetFlags(f, Knob::KNOB_CHANGED_ALWAYS);
+    Tooltip(f, "Carrega um .ofp qualquer. O browser (botao Preset Browser) preenche este "
+               "caminho sozinho.");
+    Button(f, "ofpLoadPreset", "Recarregar");
 }
 
 int OpticalFlares::knob_changed(Knob* k)
@@ -312,9 +331,8 @@ int OpticalFlares::knob_changed(Knob* k)
         }
         return 1;
     }
-    if (k->is("Options")) {
-        critical("O editor de flares ainda nao existe nesta versao.\n"
-                "Escolha um preset no knob 'Preset (.ofp)'.");
+    if (k->is("Colorspace")) {
+        updateEnabledKnobs();
         return 1;
     }
     return Iop::knob_changed(k);
@@ -331,6 +349,9 @@ void OpticalFlares::updateEnabledKnobs()
         for (const std::string& name : {"PositionXY" + idx, "Brightness" + idx, "Scale" + idx})
             if (Knob* kk = knob(name.c_str())) kk->enable(on);
     }
+    int colorspace = colorspace_;
+    if (Knob* c = knob("Colorspace")) colorspace = int(c->get_value());
+    if (Knob* g = knob("CustomGamma")) g->enable(colorspace == 1);
 }
 
 void OpticalFlares::loadPresetFile()
@@ -352,6 +373,13 @@ void OpticalFlares::loadPresetFile()
         return;
     }
     if (Knob* k = knob("renderOptions")) k->set_text(ofndk::encodeState(bytes).c_str());
+    // nome mostrado ao lado do botao: o arquivo sem pasta nem extensao
+    std::string name = path;
+    const size_t slash = name.find_last_of("/\\");
+    if (slash != std::string::npos) name = name.substr(slash + 1);
+    const size_t dot = name.find_last_of('.');
+    if (dot != std::string::npos) name = name.substr(0, dot);
+    if (Knob* k = knob("ofpPresetName")) k->set_text(name.c_str());
 }
 
 bool OpticalFlares::inputConnected(int n)
