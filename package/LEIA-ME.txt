@@ -1,0 +1,38 @@
+OpticalFlaresNDK - Optical Flares reescrito para Nuke 15.2 e 17.0 (Windows)
+=========================================================================
+
+Esta pasta e o plugin inteiro: os DLLs das duas versoes do Nuke, o browser de
+presets, o icone, e os presets e texturas. Nao precisa do Optical Flares da
+Video Copilot instalado.
+
+INSTALAR EM OUTRO PC
+--------------------
+Opcao A (com NukeShared / _AutoInstaller):
+    copie a pasta OpticalFlaresNDK para .nuke\Careta\Repository\_AutoInstaller\
+    e abra o Nuke. Pronto.
+
+Opcao B (Nuke "puro"):
+    1. copie a pasta OpticalFlaresNDK para C:\Users\<voce>\.nuke\
+    2. no arquivo C:\Users\<voce>\.nuke\init.py acrescente a linha:
+           nuke.pluginAddPath('./OpticalFlaresNDK')
+       (se o init.py nao existir, crie com:  import nuke  e a linha acima)
+    3. abra o Nuke: o no fica em Nodes > VideoCopilot > OpticalFlares
+       (ou Tab e digite OpticalFlares).
+
+Se o PC tiver o Optical Flares antigo da Video Copilot no plugin path, tire-o
+(ele tem o mesmo nome de no e o Nuke carregaria o antigo).
+
+USO
+---
+- Botao "Preset Browser": escolhe o flare com miniaturas; duplo clique aplica.
+- Scripts .nk antigos do Optical Flares abrem com o mesmo flare (o preset fica
+  salvo dentro do script).
+- Miniaturas ficam em %LOCALAPPDATA%\OpticalFlaresNDK\thumbs (pode apagar).
+- Para medir o tempo de render: variavel OFNDK_LOG=1 grava
+  %LOCALAPPDATA%\OpticalFlaresNDK\render.log.
+
+ATENCAO
+-------
+Os presets e texturas ("Optical Flares Presets" e "Optical Flares Textures")
+sao da Video Copilot e vem da licenca do dono deste pacote. Use so nas suas
+maquinas; nao compartilhe.

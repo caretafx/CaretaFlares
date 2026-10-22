@@ -43,11 +43,16 @@ def _install_dir():
 
 
 def presets_root():
+    # pacote portatil primeiro (presets ao lado deste arquivo), depois a instalacao da Video Copilot
+    if os.path.isdir(HERE + '/Optical Flares Presets'):
+        return HERE + '/Optical Flares Presets'
     p = os.environ.get('OPTICAL_FLARES_PRESET_PATH') or _install_dir() + '/Optical Flares Presets'
     return p.replace('\\', '/')
 
 
 def textures_root():
+    if os.path.isdir(HERE + '/Optical Flares Textures'):
+        return HERE + '/Optical Flares Textures'
     p = os.environ.get('OPTICAL_FLARES_TEXTURE_PATH') or _install_dir() + '/Optical Flares Textures'
     return p.replace('\\', '/')
 

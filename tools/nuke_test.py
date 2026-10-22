@@ -76,8 +76,9 @@ def _of_run():
         os.environ['OFNDK_THUMB_DLL'] = thumb_copy
         try:
             import importlib
-            import ofndk_browser
-            importlib.reload(ofndk_browser)
+            import ofndk_browser, ofndk_preset, ofndk_params, ofndk_options
+            for mod in (ofndk_browser, ofndk_preset, ofndk_params, ofndk_options):
+                importlib.reload(mod)
             ofndk_browser.THUMB_DLL = thumb_copy
             _of_log('browser pronto (miniaturas: %s)' % thumb_copy)
         except Exception as exc:

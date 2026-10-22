@@ -31,6 +31,9 @@ struct RenderSettings {
     int colorMode = 0;         // 0 Tint, 1 Multiply
     int soloFlareId = -1;      // knob SoloFlareID
     float evolution = 0.0f;    // knob AnimationEvolution
+    // expoente aplicado no fim (o no usa 1/gamma = 2,2 para linearizar). 1 = sem mudanca.
+    // Quando != 1, o canal alfa recebe min(1, maior componente) antes do expoente.
+    float outputExponent = 1.0f;
     // pasta "Optical Flares Textures" (contem Elements/ e Glass/)
     std::string textureRoot;
 };

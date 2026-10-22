@@ -5,7 +5,11 @@
 // para scripts antigos abrirem) ou de um .ofp escolhido no knob "ofpPresetFile",
 // e desenha os objetos ja implementados (por enquanto so o Glow).
 
+#include <chrono>
 #include <cmath>
+#include <cstdio>
+#include <direct.h>
+#include <filesystem>
 #include <cstdlib>
 #include <memory>
 #include <sstream>
@@ -19,6 +23,12 @@
 #include "DDImage/Knobs.h"
 #include "DDImage/Row.h"
 #include "DDImage/Thread.h"
+
+#define WIN32_LEAN_AND_MEAN
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
 
 #include "FlareRenderer.h"
 #include "OfpPreset.h"
@@ -166,6 +176,8 @@ private:
     bool rendered_ = false;
     std::vector<float> flare_;
     int flareX_ = 0, flareY_ = 0, flareW_ = 0, flareH_ = 0;
+    double lastRenderMs_ = 0.0;
+    void logRender() const;
 };
 
 static Op* build(Node* node) { return new OpticalFlares(node); }
@@ -173,13 +185,14 @@ const Op::Description OpticalFlares::description(kClass, build);
 
 void OpticalFlares::knobs(Knob_Callback f)
 {
-    // "Options" (mesmo nome do original) abre o browser de presets em Python
+    // "Options" abre a janela Optical Flares Options (Preview, Stack, Editor, Browser),
+    // escrita em Python/PySide como a do original
     PyScript_knob(f,
-                  "import ofndk_browser\n"
-                  "ofndk_browser.open_browser(nuke.thisNode())",
-                  "Options", "  Preset Browser  ");
-    Tooltip(f, "Abre o browser de presets da instalacao, com miniaturas. "
-               "Duplo clique (ou OK) aplica o preset neste no.");
+                  "import ofndk_options\n"
+                  "ofndk_options.open_options(nuke.thisNode())",
+                  "Options", "Options");
+    Tooltip(f, "Abre o editor de flares: escolha presets no Browser, edite os objetos no Stack "
+               "e no Editor, e clique OK para aplicar neste no.");
     String_knob(f, &presetName_, "ofpPresetName", "");
     ClearFlags(f, Knob::STARTLINE);
     SetFlags(f, Knob::READ_ONLY | Knob::NO_RERENDER);
@@ -481,12 +494,37 @@ static void sampleMatte(Iop& matte, int cx, int cy, int radius, float& alpha, fl
 }
 
 // Pasta "Optical Flares Textures" da instalacao do usuario (Elements/ e Glass/).
+// Pasta do pacote: o DLL fica em <pacote>/NukeXX.X/OpticalFlares.dll.
+static std::string packageRoot()
+{
+    HMODULE self = nullptr;
+    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                            reinterpret_cast<LPCWSTR>(&packageRoot), &self))
+        return std::string();
+    wchar_t buf[MAX_PATH * 4];
+    const DWORD n = GetModuleFileNameW(self, buf, DWORD(sizeof(buf) / sizeof(buf[0])));
+    if (n == 0) return std::string();
+    std::error_code ec;
+    const std::filesystem::path dll(std::wstring(buf, n));
+    return dll.parent_path().parent_path().u8string();
+}
+
 static std::string textureRoot()
 {
     auto env = [](const char* name) -> std::string {
         const char* v = std::getenv(name);
         return (v && *v) ? std::string(v) : std::string();
     };
+    // 1) pacote portatil: texturas ao lado do plugin
+    static const std::string bundled = [] {
+        const std::string root = packageRoot();
+        std::error_code ec;
+        const std::string tex = root + "/Optical Flares Textures";
+        return (!root.empty() && std::filesystem::is_directory(std::filesystem::u8path(tex), ec)) ? tex
+                                                                                               : std::string();
+    }();
+    if (!bundled.empty()) return bundled;
+    // 2) instalacao da Video Copilot
     std::string p = env("OPTICAL_FLARES_TEXTURE_PATH");
     if (!p.empty()) return p;
     p = env("OPTICAL_FLARES_PATH");
@@ -494,6 +532,27 @@ static std::string textureRoot()
     std::string home = env("USERPROFILE");
     if (home.empty()) home = env("HOME");
     return home + "/.nuke/OpticalFlares/Optical Flares Textures";
+}
+
+// Com OFNDK_LOG=1, cada render grava uma linha em %LOCALAPPDATA%/OpticalFlaresNDK/render.log
+// (tamanho, objetos e tempo), para medir o desempenho dentro do Nuke.
+void OpticalFlares::logRender() const
+{
+    static const bool on = [] {
+        const char* v = std::getenv("OFNDK_LOG");
+        return v && *v && *v != '0';
+    }();
+    if (!on) return;
+    const char* base = std::getenv("LOCALAPPDATA");
+    if (!base) return;
+    _mkdir((std::string(base) + "/OpticalFlaresNDK").c_str());
+    const std::string path = std::string(base) + "/OpticalFlaresNDK/render.log";
+    if (FILE* fh = std::fopen(path.c_str(), "a")) {
+        std::fprintf(fh, "%s %dx%d luzes=%d objetos=%d %.1f ms\n", node_name().c_str(), flareW_, flareH_,
+                     std::max(0, std::min(count_, kMaxExtraLights)) + 1,
+                     preset_ ? int(preset_->objects.size()) : 0, lastRenderMs_);
+        std::fclose(fh);
+    }
 }
 
 void OpticalFlares::ensureRendered()
@@ -520,6 +579,9 @@ void OpticalFlares::ensureRendered()
     st.colorMode = colorMode_;
     st.soloFlareId = soloFlareId_;
     st.evolution = float(animationEvolution_);
+    // o render ja devolve o flare linearizado (flare ^ 1/gamma) e o alfa: o engine so soma
+    const float gamma = (colorspace_ == 1 && customGamma_ > 0.0f) ? customGamma_ : 0.4545f;
+    st.outputExponent = 1.0f / gamma;
     st.textureRoot = textureRoot();
 
     Iop* matte = (enable2DOcclusion_ && inputConnected(1)) ? dynamic_cast<Iop*>(Op::input(1)) : nullptr;
@@ -553,9 +615,12 @@ void OpticalFlares::ensureRendered()
         lights.push_back(l);
     }
 
+    const auto t0 = std::chrono::steady_clock::now();
     ofndk::FlareRenderer renderer;
     if (preset_) renderer.render(*preset_, st, lights, flare_);
     else flare_.assign(size_t(flareW_) * size_t(flareH_) * 4, 0.0f);
+    lastRenderMs_ = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+    logRender();
 
     renderedHash_ = hash();
     rendered_ = true;
@@ -569,8 +634,6 @@ void OpticalFlares::engine(int y, int x, int r, ChannelMask channels, Row& out)
     in.get(input0(), y, x, r, channels);
     if (aborted()) return;
 
-    const float gamma = (colorspace_ == 1 && customGamma_ > 0.0f) ? customGamma_ : 0.4545f;
-    const float expo = 1.0f / gamma;
     const int row = flareH_ - 1 - (y - flareY_);
     const bool rowInside = row >= 0 && row < flareH_;
     const float* frow = rowInside ? flare_.data() + size_t(row) * size_t(flareW_) * 4 : nullptr;
@@ -590,12 +653,8 @@ void OpticalFlares::engine(int y, int x, int r, ChannelMask channels, Row& out)
             const int col = X - flareX_;
             if (frow && col >= 0 && col < flareW_) {
                 const float* p = frow + size_t(col) * 4;
-                if (comp < 3) {
-                    v = std::pow(std::max(0.0f, p[comp]), expo);
-                } else if (renderMode_ == kOnTransparent) {
-                    // alfa = maior componente, limitado a 1 (aproximacao; ver doc 03 §2)
-                    v = std::min(1.0f, std::max(std::max(p[0], p[1]), p[2]));
-                }
+                if (comp < 3) v = p[comp];  // ja linearizado no render
+                else if (renderMode_ == kOnTransparent) v = p[3];  // min(1, maior componente)
             }
             dst[X] = base + v;
         }

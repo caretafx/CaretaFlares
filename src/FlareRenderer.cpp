@@ -14,6 +14,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <functional>
+#include <memory>
 
 #define WIN32_LEAN_AND_MEAN
 #ifndef NOMINMAX
@@ -213,11 +214,22 @@ void drawTri(Ctx& R, const Vtx& A, const Vtx& B, const Vtx& C, Shade& shade)
         if (xl > xr) continue;
         const int c0 = std::max(rnd(float(xl)), R.clip[0]);
         const int c1 = std::min(rnd(float(xr)), R.clip[2]);
+        if (c0 >= c1) continue;
         float* row = R.buf + size_t(r) * size_t(R.W) * 4;
-        for (int c = c0; c < c1; ++c) {
-            const double dx = c - ax, dy = r - ay;
-            for (int k = 0; k < 4; ++k) attr[k] = float(A.a[k] + gx[k] * dx + gy[k] * dy);
-            shade(attr, row + size_t(c) * 4);
+        // atributos: valor exato no inicio da linha e passo constante por pixel
+        float step[4];
+        const double dx0 = c0 - ax, dy = r - ay;
+        for (int k = 0; k < 4; ++k) {
+            attr[k] = float(A.a[k] + gx[k] * dx0 + gy[k] * dy);
+            step[k] = float(gx[k]);
+        }
+        float* px = row + size_t(c0) * 4;
+        for (int c = c0; c < c1; ++c, px += 4) {
+            shade(attr, px);
+            attr[0] += step[0];
+            attr[1] += step[1];
+            attr[2] += step[2];
+            attr[3] += step[3];
         }
     }
 }
@@ -603,6 +615,9 @@ void drawGlow(Ctx& R, const FlareObject& o)
     const int y0 = std::max(R.clip[1], int((py - ey) * R.H));
     const int y1 = std::min(R.clip[3], int((py + ey) * R.H) + 1);
     const float invSx = 0.5f / sx, invSy = 0.5f / sy, invAspect = 1.0f / s.aspect;
+    const float dmax = reach * 0.5f;
+    const float dmax2 = dmax * dmax;
+    const bool gammaOne = invGamma == 1.0f;
     float col[3];
     for (int j = y0; j < y1; ++j) {
         const float dy = float(j) / float(R.H) - py;
@@ -611,8 +626,11 @@ void drawGlow(Ctx& R, const FlareObject& o)
             const float dxa = (float(i) / float(R.W) - px) * invAspect;
             const float u = (c * dxa - sn * dy) * invSx;
             const float v = (c * dy + sn * dxa) * invSy;
-            const float d = std::sqrt(u * u + v * v + 1e-10f);
-            const float val = std::pow(b / (d + 0.5f), invGamma) - 0.005f;
+            const float d2 = u * u + v * v + 1e-10f;
+            if (d2 >= dmax2) continue;  // fora do alcance: o valor seria <= 0
+            const float d = std::sqrt(d2);
+            const float q = b / (d + 0.5f);
+            const float val = (gammaOne ? q : std::pow(q, invGamma)) - 0.005f;
             if (val <= 0.0f) continue;
             shadeColor(s, d, col);
             addColor(row + size_t(i) * 4, col, val);
@@ -1544,7 +1562,9 @@ void drawSpikeBall(Ctx& R, const FlareObject& o)
     }
     float col[3];
     drawMesh(R, v, 2, [&](const float* a, float* p) {
-        const float r1 = std::sqrt(a[0] * a[0] + a[1] * a[1] + 1e-5f);
+        const float r1sq = a[0] * a[0] + a[1] * a[1] + 1e-5f;
+        if (r1sq >= 1.0f) return;  // max(0, 1 - r1) = 0
+        const float r1 = std::sqrt(r1sq);
         const float r2 = std::sqrt((a[0] * a[0] * 5.0f + a[1] * a[1]) * 5.0f + 1e-5f);
         const float wedge = std::max(0.0f, 1.0f - std::fabs(std::atan2(a[1], a[0])) * 0.77f);
         const float val = wedge * ((std::max(0.0f, 1.0f - r1) * a[2] * b) / (r2 + 0.25f));
@@ -1838,6 +1858,20 @@ void applyColorCorrection(const Preset& preset, float* buf, size_t pixels)
     }
 }
 
+// Saida do no: alfa = min(1, maior componente em espaco de display) e RGB ^ expoente.
+void applyOutput(float* buf, size_t pixels, float expo)
+{
+    if (expo == 1.0f) return;
+    for (size_t n = 0; n < pixels; ++n) {
+        float* p = buf + n * 4;
+        const float r = std::max(0.0f, p[0]), g = std::max(0.0f, p[1]), b = std::max(0.0f, p[2]);
+        p[3] = std::min(1.0f, std::max(r, std::max(g, b)));
+        p[0] = r > 0.0f ? std::pow(r, expo) : 0.0f;
+        p[1] = g > 0.0f ? std::pow(g, expo) : 0.0f;
+        p[2] = b > 0.0f ? std::pow(b, expo) : 0.0f;
+    }
+}
+
 // ------------------------------------------------------------- varios nucleos
 // Threads do Windows direto (sem std::thread/std::mutex: o Nuke traz uma runtime C++
 // mais antiga). O quadro e dividido em faixas de linhas; cada thread pega a proxima
@@ -1892,8 +1926,14 @@ void FlareRenderer::render(const Preset& preset, const RenderSettings& st, const
                            std::vector<float>& rgba, RenderStats* stats) const
 {
     const int W = st.width, H = st.height;
-    rgba.assign(size_t(std::max(W, 0)) * size_t(std::max(H, 0)) * 4, 0.0f);
-    if (W <= 0 || H <= 0 || preset.objects.empty()) return;
+    // sem zerar aqui: cada faixa limpa as proprias linhas em paralelo (memset de 50 MB
+    // numa thread so custava quase tanto quanto o render)
+    rgba.resize(size_t(std::max(W, 0)) * size_t(std::max(H, 0)) * 4);
+    if (W <= 0 || H <= 0) return;
+    if (preset.objects.empty()) {
+        std::fill(rgba.begin(), rgba.end(), 0.0f);
+        return;
+    }
     const size_t pixels = size_t(W) * size_t(H);
     RenderStats local;
 
@@ -1956,12 +1996,15 @@ void FlareRenderer::render(const Preset& preset, const RenderSettings& st, const
         lastMatte = matteBox(tmp, 0.0f);
         lc.push_back(c);
     }
-    std::vector<float> lightBuf;
-    if (anyColorize) lightBuf.assign(pixels * 4, 0.0f);
+    // buffers auxiliares sem inicializar (new float[]); as faixas zeram/preenchem o que usam
+    std::unique_ptr<float[]> lightBuf(anyColorize ? new float[pixels * 4] : nullptr);
 
     const bool screen = preset.globals.getInt(9, 0) == 1;
     const bool aberration = aberrationOn(preset);
-    const int band = 16;
+    int band = std::max(4, std::min(16, H / (workerCount() * 4)));  // ~4 faixas por thread
+    if (const char* env = std::getenv("OFNDK_BAND")) band = std::max(1, std::atoi(env));
+    // copia para a aberracao (ela le vizinhos de outras faixas), preenchida na fase 1
+    std::unique_ptr<float[]> copy(aberration ? new float[pixels * 4] : nullptr);
 
     // fase 1: elementos de todas as luzes, colorize, Screen e lens texture, por faixa
     parallelBands(H, band, [&](int y0, int y1) {
@@ -1971,6 +2014,8 @@ void FlareRenderer::render(const Preset& preset, const RenderSettings& st, const
         R.stats = (y0 == 0) ? &local : nullptr;  // conta uma vez so
         const size_t off = size_t(y0) * size_t(W) * 4;
         const size_t count = size_t(y1 - y0) * size_t(W);
+        std::fill(rgba.begin() + off, rgba.begin() + off + count * 4, 0.0f);
+        if (lightBuf) std::fill(lightBuf.get() + off, lightBuf.get() + off + count * 4, 0.0f);
         for (const LightCtx& c : lc) {
             R.lightX = c.lightX;
             R.lightY = c.lightY;
@@ -1979,7 +2024,7 @@ void FlareRenderer::render(const Preset& preset, const RenderSettings& st, const
             R.bright = c.bright;
             R.scale = c.scale;
             std::copy(c.color, c.color + 3, R.lightColor);
-            R.buf = (c.colorize > 0.0f) ? lightBuf.data() : rgba.data();
+            R.buf = (c.colorize > 0.0f) ? lightBuf.get() : rgba.data();
             for (size_t idx = 0; idx < preset.objects.size(); ++idx) {
                 const FlareObject& o = preset.objects[idx];
                 if (anySolo ? !o.solo : o.hidden) continue;
@@ -2003,7 +2048,7 @@ void FlareRenderer::render(const Preset& preset, const RenderSettings& st, const
                 if (R.stats) ++(drawn ? R.stats->objectsDrawn : R.stats->objectsSkipped);
             }
             if (c.colorize > 0.0f)
-                applyColorize(c.colorize, c.colorizeColor, lightBuf.data() + off, rgba.data() + off, count);
+                applyColorize(c.colorize, c.colorizeColor, lightBuf.get() + off, rgba.data() + off, count);
         }
         // Blend Mode = Screen: curva logaritmica (0,6 * ln(2x + 1))
         if (screen)
@@ -2013,16 +2058,21 @@ void FlareRenderer::render(const Preset& preset, const RenderSettings& st, const
             }
         R.buf = rgba.data();
         applyLensTexture(R, lensLights, lastMatte, rgba.data(), y0, y1);
-        if (!aberration) applyColorCorrection(preset, rgba.data() + off, count);
+        if (!aberration) {
+            applyColorCorrection(preset, rgba.data() + off, count);
+            applyOutput(rgba.data() + off, count, st.outputExponent);
+        } else
+            std::copy(rgba.begin() + off, rgba.begin() + off + count * 4, copy.get() + off);
     });
 
     // fase 2: aberracao (le vizinhos de outras faixas, entao vem depois) e correcao de cor
     if (aberration) {
-        const std::vector<float> copy(rgba);
         parallelBands(H, band, [&](int y0, int y1) {
             Ctx R = base;
-            applyAberration(R, copy.data(), rgba.data(), y0, y1);
-            applyColorCorrection(preset, rgba.data() + size_t(y0) * size_t(W) * 4, size_t(y1 - y0) * size_t(W));
+            applyAberration(R, copy.get(), rgba.data(), y0, y1);
+            float* rows = rgba.data() + size_t(y0) * size_t(W) * 4;
+            applyColorCorrection(preset, rows, size_t(y1 - y0) * size_t(W));
+            applyOutput(rows, size_t(y1 - y0) * size_t(W), st.outputExponent);
         });
     }
     if (stats) *stats = local;

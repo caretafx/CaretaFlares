@@ -348,3 +348,22 @@ Reconstruído ou incerto (confere visualmente, sem render de referência):
   renderizador sem depender do Nuke, e ficam em `%LOCALAPPDATA%/OpticalFlaresNDK/thumbs`. O
   preview grande usa a posição da luz e do centro do nó. Aplicar grava `renderOptions`,
   `ofpPresetName` e `ofpPresetFile` num único undo.
+
+### Janela Options, pacote portátil e mais desempenho (2026-10-21, terceira rodada)
+
+- `Options` abre `ofndk_options.py`: Preview (arrastar move a luz; brilho, escala e posição do
+  preview; guias), Stack (Global Parameters com ADD/SCN, cor global e Save Preset; linhas com
+  miniatura, brilho, escala, HIDE, SOLO, X; renomear, duplicar, mover), Editor (seções e rótulos do
+  original, valores arrastáveis, menus, cores, texturas) e Browser (abas OBJECTS e BROWSER; clique
+  carrega, botão direito combina). Undo/Redo, Duplicate, Clear All, Cancel e OK no topo. Layout
+  conforme as imagens da documentação da Video Copilot para Nuke.
+- `ofndk_preset.py` lê e grava .ofp byte a byte igual (ida e volta conferida nos 243 presets; o
+  campo de nome dos presets originais tem lixo depois do `\0`, preservado).
+- `ofthumb_render_mem` renderiza o preset em memória (preview ao vivo e miniaturas por objeto).
+- Desempenho: buffers zerados por faixa em paralelo; expoente de saída (1/gamma) e alfa calculados
+  no render paralelo, o engine só soma; atributos do rasterizador incrementais; saídas antecipadas
+  no Glow e no Spike Ball. Diferença para a versão anterior ≤ 1/255 (4/255 em 2 pixels).
+  `OFNDK_LOG=1` grava o tempo de cada render em `%LOCALAPPDATA%/OpticalFlaresNDK/render.log`.
+- Pacote portátil: o DLL acha a própria pasta (`GetModuleHandleEx`) e usa as texturas embutidas;
+  o browser usa presets e texturas ao lado dele; `menu.py` próprio com ícone desenhado por
+  `tools/make_icon.py`. `make_dist.py` copia presets e texturas da instalação (fora do git).

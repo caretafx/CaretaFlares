@@ -5,6 +5,8 @@
 //   oftool render PRESET.ofp LARGURA ALTURA LUZ_X LUZ_Y SAIDA.ppm [CENTRO_X CENTRO_Y]
 //       renderiza o flare num PPM 8 bits,
 //       em espaco de display (o mesmo que o viewer mostraria com gama 2,2).
+#include <algorithm>
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
@@ -88,8 +90,51 @@ static int render(int argc, char** argv)
     return 0;
 }
 
+// oftool bench PRESET W H [REPETICOES]: tempo do render inteiro e de cada objeto (solo)
+static int bench(int argc, char** argv)
+{
+    if (argc < 5) return 2;
+    std::vector<uint8_t> bytes;
+    std::string err;
+    Preset p;
+    if (!loadOfpFile(argv[2], bytes, err) || !parseOfp(bytes.data(), bytes.size(), p, err)) {
+        std::printf("erro: %s\n", err.c_str());
+        return 1;
+    }
+    const int reps = argc > 5 ? std::atoi(argv[5]) : 3;
+    RenderSettings st;
+    st.width = std::atoi(argv[3]);
+    st.height = std::atoi(argv[4]);
+    st.centerX = st.width * 0.5f;
+    st.centerY = st.height * 0.5f;
+    const char* h = std::getenv("USERPROFILE");
+    st.textureRoot = std::string(h ? h : "") + "/.nuke/OpticalFlares/Optical Flares Textures";
+    Light l;
+    l.x = st.width * 0.3f;
+    l.y = st.height * 0.6f;
+    std::vector<float> rgba;
+    auto timeIt = [&]() {
+        double best = 1e30;
+        for (int r = 0; r < reps; ++r) {
+            const auto t0 = std::chrono::steady_clock::now();
+            FlareRenderer().render(p, st, {l}, rgba, nullptr);
+            const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+            best = std::min(best, ms);
+        }
+        return best;
+    };
+    std::printf("total %.1f ms\n", timeIt());
+    for (size_t i = 0; i < p.objects.size(); ++i) {
+        st.soloFlareId = int(i);
+        std::printf("  %2zu %-12s %7.2f ms  %s\n", i, objectTypeName(p.objects[i].type), timeIt(),
+                    p.objects[i].name.c_str());
+    }
+    return 0;
+}
+
 int main(int argc, char** argv)
 {
+    if (argc >= 2 && std::string(argv[1]) == "bench") return bench(argc, argv);
     if (argc >= 3 && std::string(argv[1]) == "scan") return scan(argv[2]);
     if (argc >= 2 && std::string(argv[1]) == "render") return render(argc, argv);
     std::printf("uso: oftool scan PASTA | oftool render ...\n");
