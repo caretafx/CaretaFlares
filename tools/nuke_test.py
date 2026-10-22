@@ -1,6 +1,6 @@
-"""Teste do OpticalFlaresNDK sem alterar o ~/.nuke.
+"""Teste do CaretaFlares sem alterar o ~/.nuke.
 
-Abra um Nuke 15.2 ou 17.0 NOVO (sessao em que nenhum OpticalFlares foi criado
+Abra um Nuke 15.2 ou 17.0 NOVO (sessao em que nenhum CaretaFlares foi criado
 nem nenhum script com ele foi aberto; uma sessao so registra o no uma vez) e rode no Script Editor:
 
     exec(open(r'E:/Careta/OpticalFlaresNDK/tools/nuke_test.py').read())
@@ -8,7 +8,7 @@ nem nenhum script com ele foi aberto; uma sessao so registra o no uma vez) e rod
 O Nuke procura plugins pelo nome no plugin path, e la esta a pasta do plugin
 antigo (que nao carrega no 15/17). Para nao depender dessa busca, este script
 carrega o DLL novo direto pelo caminho completo com o carregador do Windows; o
-DLL registra o no "OpticalFlares" ao carregar. Cada passo vai para
+DLL registra o no "CaretaFlares" ao carregar. Cada passo vai para
 E:/Careta/OpticalFlaresNDK/build/nuke_test.log.
 """
 import ctypes
@@ -36,11 +36,11 @@ def _of_run():
     if key not in _OF_BUILDS:
         _of_log('sem build para esta versao')
         return
-    dll = _OF_ROOT + '/build/' + _OF_BUILDS[key] + '/OpticalFlares.dll'
+    dll = _OF_ROOT + '/build/' + _OF_BUILDS[key] + '/CaretaFlares.dll'
     _of_log('dll: %s (existe=%s)' % (dll, os.path.isfile(dll)))
     _of_log('plugin path: %s' % nuke.pluginPath())
     try:
-        _of_log('ja carregados: %s' % nuke.plugins(nuke.ALL, 'OpticalFlares*'))
+        _of_log('ja carregados: %s' % nuke.plugins(nuke.ALL, 'CaretaFlares*'))
     except Exception as exc:
         _of_log('nuke.plugins falhou: %r' % (exc,))
 
@@ -50,7 +50,7 @@ def _of_run():
     import time
     run_dir = os.path.dirname(dll) + '/run'
     os.makedirs(run_dir, exist_ok=True)
-    copy = '%s/OpticalFlares_%d.dll' % (run_dir, int(time.time()))
+    copy = '%s/CaretaFlares_%d.dll' % (run_dir, int(time.time()))
     shutil.copy2(dll, copy)
     _of_log('copia carregada: %s' % copy)
     dll = copy
@@ -64,22 +64,22 @@ def _of_run():
         return
     _of_log('LoadLibrary ok')
 
-    # browser de presets: modulo do pacote + copia do ofthumb.dll (tambem nao trava o build)
+    # browser de presets: modulo do pacote + copia do CaretaFlaresThumb.dll (tambem nao trava o build)
     import sys
     pkg = _OF_ROOT + '/package'
     if pkg not in sys.path:
         sys.path.insert(0, pkg)
-    thumb = os.path.dirname(os.path.dirname(copy)) + '/ofthumb.dll'
+    thumb = os.path.dirname(os.path.dirname(copy)) + '/CaretaFlaresThumb.dll'
     if os.path.isfile(thumb):
-        thumb_copy = '%s/ofthumb_%d.dll' % (run_dir, int(time.time()))
+        thumb_copy = '%s/CaretaFlaresThumb_%d.dll' % (run_dir, int(time.time()))
         shutil.copy2(thumb, thumb_copy)
-        os.environ['OFNDK_THUMB_DLL'] = thumb_copy
+        os.environ['CARETAFLARES_THUMB_DLL'] = thumb_copy
         try:
             import importlib
-            import ofndk_browser, ofndk_preset, ofndk_params, ofndk_options
-            for mod in (ofndk_browser, ofndk_preset, ofndk_params, ofndk_options):
+            import caretaflares_browser, caretaflares_preset, caretaflares_params, caretaflares_options
+            for mod in (caretaflares_browser, caretaflares_preset, caretaflares_params, caretaflares_options):
                 importlib.reload(mod)
-            ofndk_browser.THUMB_DLL = thumb_copy
+            caretaflares_browser.THUMB_DLL = thumb_copy
             _of_log('browser pronto (miniaturas: %s)' % thumb_copy)
         except Exception as exc:
             _of_log('browser falhou ao importar: %r' % (exc,))
@@ -88,7 +88,7 @@ def _of_run():
     for sel in nuke.selectedNodes():
         sel.setSelected(False)
     try:
-        node = nuke.createNode('OpticalFlares', inpanel=True)
+        node = nuke.createNode('CaretaFlares', inpanel=True)
     except Exception as exc:
         _of_log('createNode falhou: %r' % (exc,))
         _of_log(traceback.format_exc())

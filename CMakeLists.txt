@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(OpticalFlaresNDK LANGUAGES CXX)
+project(CaretaFlares LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -24,8 +24,8 @@ if(MSVC)
 endif()
 
 # Miniaturas para o browser de presets (Python/ctypes), sem dependencia do Nuke.
-add_library(ofthumb SHARED src/ThumbApi.cpp)
-target_link_libraries(ofthumb PRIVATE ofcore)
+add_library(CaretaFlaresThumb SHARED src/ThumbApi.cpp)
+target_link_libraries(CaretaFlaresThumb PRIVATE ofcore)
 
 # Ferramenta de teste (roda sem o Nuke).
 add_executable(oftool tests/oftool.cpp)
@@ -35,9 +35,9 @@ target_link_libraries(oftool PRIVATE ofcore)
 option(OF_BUILD_PLUGIN "Compila o plugin do Nuke" ON)
 if(OF_BUILD_PLUGIN)
     find_package(Nuke REQUIRED)
-    add_nuke_plugin(OpticalFlares src/OpticalFlares.cpp)
-    target_link_libraries(OpticalFlares PRIVATE ofcore)
+    add_nuke_plugin(CaretaFlares src/CaretaFlares.cpp)
+    target_link_libraries(CaretaFlares PRIVATE ofcore)
     if(MSVC)
-        target_compile_options(OpticalFlares PRIVATE /W3)
+        target_compile_options(CaretaFlares PRIVATE /W3)
     endif()
 endif()

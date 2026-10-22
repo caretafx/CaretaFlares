@@ -1,7 +1,9 @@
-# OpticalFlaresNDK
+# CaretaFlares
 
-Plugin novo, escrito do zero no NDK do Nuke (C++), compatível em nome de nó e knobs com o
-Optical Flares da Video Copilot (versão 1.0.86, abandonada, compilada só até o Nuke 13.0).
+Plugin de lens flares para Nuke, escrito do zero no NDK (C++) com a janela Options em
+Python/PySide. Nó `CaretaFlares`; também responde pelo nome antigo `OpticalFlares`, então
+scripts feitos com o Optical Flares da Video Copilot (1.0.86, só até o Nuke 13.0) abrem nele
+com os mesmos knobs.
 Alvos: Nuke 15.2v9 e Nuke 17.0v2, Windows x64.
 
 O plugin lê os presets (.ofp) e texturas da instalação do usuário em tempo de execução.
@@ -25,8 +27,8 @@ Documentos em `docs/`, na ordem numérica. Ferramentas auxiliares em `tools/`.
 - `build\Nuke15.2v9\oftool.exe scan <pasta de presets>` valida o parser;
   `oftool render <preset> W H X Y saida.ppm` renderiza sem o Nuke.
 - `tools\nuke_test.py` carrega o DLL novo no Nuke sem mexer no `~/.nuke`.
-- `python tools\make_dist.py` monta `dist\OpticalFlaresNDK` (init.py + DLL por versão),
-  no formato das pastas do `_AutoInstaller`.
+- `python tools\make_dist.py` monta `dist\CaretaFlares` (pasta-plugin completa: DLLs por
+  versão, janela Options, ícone, presets e texturas), no formato das pastas do `_AutoInstaller`.
 
 Estado: nó completo em knobs (nomes do original), estado `renderOptions` compatível,
 carregamento de `.ofp` e o elemento Glow desenhado. Os demais elementos são ignorados.

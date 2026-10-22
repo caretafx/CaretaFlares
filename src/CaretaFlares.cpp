@@ -1,4 +1,4 @@
-// OpticalFlares.cpp - no do Nuke compativel em nome e knobs com o Optical Flares
+// CaretaFlares.cpp - no do Nuke compativel em knobs com o Optical Flares
 // 1.0.86 (docs/03-comportamento-render.md §1). Escrito do zero.
 //
 // v1: le o estado do flare do knob renderOptions (mesmo formato do original,
@@ -38,11 +38,14 @@ using namespace DD::Image;
 
 namespace {
 
-const char* const kClass = "OpticalFlares";
+const char* const kClass = "CaretaFlares";
+// nome antigo: scripts .nk feitos com o Optical Flares abrem neste no e, ao salvar,
+// passam a se chamar CaretaFlares (os knobs sao os mesmos)
+const char* const kLegacyClass = "OpticalFlares";
 const char* const kHelp =
-    "Optical Flares (reimplementacao independente para Nuke 15/17).\n"
-    "Le os presets .ofp e as texturas da instalacao do usuario. "
-    "Versao em desenvolvimento: so o elemento Glow e desenhado.";
+    "CaretaFlares: lens flares para Nuke 15.2 e 17.0.\n"
+    "Options abre o editor (Preview, Stack, Editor, Browser). "
+    "Le presets .ofp e abre scripts antigos do Optical Flares.";
 
 const int kMaxExtraLights = 16;
 
@@ -57,9 +60,9 @@ enum RenderMode { kOnBlack = 0, kOnTransparent = 1, kOverOriginal = 2 };
 
 }  // namespace
 
-class OpticalFlares : public Iop {
+class CaretaFlares : public Iop {
 public:
-    explicit OpticalFlares(Node* node)
+    explicit CaretaFlares(Node* node)
         : Iop(node)
     {
         inputs(4);
@@ -181,16 +184,17 @@ private:
     void logRender() const;
 };
 
-static Op* build(Node* node) { return new OpticalFlares(node); }
-const Op::Description OpticalFlares::description(kClass, build);
+static Op* build(Node* node) { return new CaretaFlares(node); }
+const Op::Description CaretaFlares::description(kClass, build);
+static const Op::Description legacyDescription(kLegacyClass, build);
 
-void OpticalFlares::knobs(Knob_Callback f)
+void CaretaFlares::knobs(Knob_Callback f)
 {
-    // "Options" abre a janela Optical Flares Options (Preview, Stack, Editor, Browser),
+    // "Options" abre a janela CaretaFlares Options (Preview, Stack, Editor, Browser),
     // escrita em Python/PySide como a do original
     PyScript_knob(f,
-                  "import ofndk_options\n"
-                  "ofndk_options.open_options(nuke.thisNode())",
+                  "import caretaflares_options\n"
+                  "caretaflares_options.open_options(nuke.thisNode())",
                   "Options", "Options");
     Tooltip(f, "Abre o editor de flares: escolha presets no Browser, edite os objetos no Stack "
                "e no Editor, e clique OK para aplicar neste no.");
@@ -326,7 +330,7 @@ void OpticalFlares::knobs(Knob_Callback f)
     Button(f, "ofpLoadPreset", "Recarregar");
 }
 
-int OpticalFlares::knob_changed(Knob* k)
+int CaretaFlares::knob_changed(Knob* k)
 {
     if (k == &Knob::showPanel || k->is("Count")) {
         updateEnabledKnobs();
@@ -352,7 +356,7 @@ int OpticalFlares::knob_changed(Knob* k)
     return Iop::knob_changed(k);
 }
 
-void OpticalFlares::updateEnabledKnobs()
+void CaretaFlares::updateEnabledKnobs()
 {
     // o valor do knob so chega em count_ no proximo store(); ler do proprio knob
     int count = count_;
@@ -368,7 +372,7 @@ void OpticalFlares::updateEnabledKnobs()
     if (Knob* g = knob("CustomGamma")) g->enable(colorspace == 1);
 }
 
-void OpticalFlares::loadPresetFile()
+void CaretaFlares::loadPresetFile()
 {
     // no knob_changed o membro presetFile_ ainda tem o valor antigo; ler do knob
     Knob* fileKnob = knob("ofpPresetFile");
@@ -378,12 +382,12 @@ void OpticalFlares::loadPresetFile()
     std::vector<uint8_t> bytes;
     std::string err;
     if (!ofndk::loadOfpFile(path, bytes, err)) {
-        critical("Optical Flares: %s", err.c_str());
+        critical("CaretaFlares: %s", err.c_str());
         return;
     }
     ofndk::Preset test;
     if (!ofndk::parseOfp(bytes.data(), bytes.size(), test, err)) {
-        critical("Optical Flares: preset invalido (%s)", err.c_str());
+        critical("CaretaFlares: preset invalido (%s)", err.c_str());
         return;
     }
     if (Knob* k = knob("renderOptions")) k->set_text(ofndk::encodeState(bytes).c_str());
@@ -396,7 +400,7 @@ void OpticalFlares::loadPresetFile()
     if (Knob* k = knob("ofpPresetName")) k->set_text(name.c_str());
 }
 
-bool OpticalFlares::inputConnected(int n)
+bool CaretaFlares::inputConnected(int n)
 {
     Iop* in = dynamic_cast<Iop*>(Op::input(n));
     if (!in) return false;
@@ -405,7 +409,7 @@ bool OpticalFlares::inputConnected(int n)
     return !(b.r() - b.x() == 1 && b.t() - b.y() == 1);
 }
 
-void OpticalFlares::_validate(bool forReal)
+void CaretaFlares::_validate(bool forReal)
 {
     input0().validate(forReal);
     if (Iop* matte = dynamic_cast<Iop*>(Op::input(1))) matte->validate(forReal);
@@ -447,7 +451,7 @@ void OpticalFlares::_validate(bool forReal)
     else if (!preset_ || preset_->empty()) warning("Nenhum preset carregado (knob 'Preset (.ofp)').");
 }
 
-void OpticalFlares::_request(int x, int y, int r, int t, ChannelMask channels, int count)
+void CaretaFlares::_request(int x, int y, int r, int t, ChannelMask channels, int count)
 {
     input0().request(x, y, r, t, channels, count);
     // a matte e lida em volta de cada luz (oclusao 2D) e por cima (Show Foreground)
@@ -495,7 +499,7 @@ static void sampleMatte(Iop& matte, int cx, int cy, int radius, float& alpha, fl
 }
 
 // Pasta "Optical Flares Textures" da instalacao do usuario (Elements/ e Glass/).
-// Pasta do pacote: o DLL fica em <pacote>/NukeXX.X/OpticalFlares.dll.
+// Pasta do pacote: o DLL fica em <pacote>/NukeXX.X/CaretaFlares.dll.
 static std::string packageRoot()
 {
     HMODULE self = nullptr;
@@ -520,7 +524,7 @@ static std::string textureRoot()
     static const std::string bundled = [] {
         const std::string root = packageRoot();
         std::error_code ec;
-        const std::string tex = root + "/Optical Flares Textures";
+        const std::string tex = root + "/Textures";
         return (!root.empty() && std::filesystem::is_directory(std::filesystem::u8path(tex), ec)) ? tex
                                                                                                : std::string();
     }();
@@ -535,21 +539,21 @@ static std::string textureRoot()
     return home + "/.nuke/OpticalFlares/Optical Flares Textures";
 }
 
-// Com OFNDK_LOG=1, cada render grava uma linha em %LOCALAPPDATA%/OpticalFlaresNDK/render.log
+// Cada render grava uma linha em %LOCALAPPDATA%/CaretaFlares/render.log
 // (tamanho, objetos e tempo), para medir o desempenho dentro do Nuke.
-void OpticalFlares::logRender() const
+void CaretaFlares::logRender() const
 {
-    // ligado por padrao (OFNDK_LOG=0 desliga): uma linha por render, para medir a fluidez
+    // ligado por padrao (CARETAFLARES_LOG=0 desliga): uma linha por render, para medir a fluidez
     // dentro do Nuke. O arquivo recomeca quando passa de 512 KB.
     static const bool on = [] {
-        const char* v = std::getenv("OFNDK_LOG");
+        const char* v = std::getenv("CARETAFLARES_LOG");
         return !(v && *v == '0');
     }();
     if (!on) return;
     const char* base = std::getenv("LOCALAPPDATA");
     if (!base) return;
-    _mkdir((std::string(base) + "/OpticalFlaresNDK").c_str());
-    const std::string path = std::string(base) + "/OpticalFlaresNDK/render.log";
+    _mkdir((std::string(base) + "/CaretaFlares").c_str());
+    const std::string path = std::string(base) + "/CaretaFlares/render.log";
     static double lastStamp = 0.0;
     const double now = std::chrono::duration<double, std::milli>(
                            std::chrono::steady_clock::now().time_since_epoch()).count();
@@ -569,7 +573,7 @@ void OpticalFlares::logRender() const
     }
 }
 
-void OpticalFlares::ensureRendered()
+void CaretaFlares::ensureRendered()
 {
     Guard guard(renderLock_);
     if (rendered_ && renderedHash_ == hash()) return;
@@ -640,7 +644,7 @@ void OpticalFlares::ensureRendered()
     rendered_ = true;
 }
 
-void OpticalFlares::engine(int y, int x, int r, ChannelMask channels, Row& out)
+void CaretaFlares::engine(int y, int x, int r, ChannelMask channels, Row& out)
 {
     ensureRendered();
 

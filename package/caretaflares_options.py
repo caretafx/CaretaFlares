@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
-"""Janela "Optical Flares Options" do plugin novo: Preview, Stack, Editor e Browser,
+"""Janela "CaretaFlares Options": Preview, Stack, Editor e Browser,
 no mesmo arranjo e visual da janela do plugin original (imagens da documentacao da
 Video Copilot para Nuke). Desenho e codigo proprios.
 
 Abre pelo botao Options do no. Edita uma copia do preset; OK grava no no
 (knob renderOptions, num unico undo), Cancel descarta.
 
-Fora do Nuke (teste): python ofndk_options.py [--shot SAIDA.png] [PRESET.ofp]
+Fora do Nuke (teste): python caretaflares_options.py [--shot SAIDA.png] [PRESET.ofp]
 """
 from __future__ import print_function
 
@@ -26,12 +26,12 @@ try:
 except ImportError:
     nuke = None
 
-import ofndk_browser as fb
-import ofndk_params as P
-import ofndk_preset as ofp
+import caretaflares_browser as fb
+import caretaflares_params as P
+import caretaflares_preset as ofp
 
 QAction = getattr(QtGui, 'QAction', None) or QtWidgets.QAction
-VERSION = '1.1.0'
+VERSION = '1.2.0'
 DEFAULT_PREVIEW_POS = (23.6, 27.4)  # % da largura, % da altura a partir do topo (como no original)
 _window = None
 
@@ -176,7 +176,7 @@ def _lens_icon(size=22, color=QtGui.QColor(230, 230, 230)):
 
 def _settings():
     """Preferencias da janela (tamanho das miniaturas etc.), por usuario."""
-    return QtCore.QSettings('OpticalFlaresNDK', 'Options')
+    return QtCore.QSettings('CaretaFlares', 'Options')
 
 
 def _arrow_style():
@@ -242,7 +242,7 @@ class RenderWorker(QtCore.QObject):
         self.preview = None
         self.queue = []
         self.alive = True
-        t = threading.Thread(target=self._run, name='ofndk-options')
+        t = threading.Thread(target=self._run, name='caretaflares-options')
         t.daemon = True
         t.start()
 
@@ -284,7 +284,7 @@ class RenderWorker(QtCore.QObject):
             except RuntimeError:
                 return  # janela ja fechada
             except Exception as exc:
-                print('OpticalFlares Options: %s' % exc)
+                print('CaretaFlares Options: %s' % exc)
 
 
 def _image(raw, w, h):
@@ -447,7 +447,7 @@ class OptionsWindow(QtWidgets.QDialog):
     def __init__(self, node=None, preset_bytes=None, parent=None):
         super(OptionsWindow, self).__init__(parent)
         self.setObjectName('ofOptions')
-        self.setWindowTitle('Optical Flares Options')
+        self.setWindowTitle('CaretaFlares Options')
         self.setStyleSheet(STYLE + _arrow_style())
         self.resize(1240, 900)
         self.node_name = node.fullName() if node is not None else None
@@ -561,7 +561,7 @@ class OptionsWindow(QtWidgets.QDialog):
             lay.addWidget(b)
             self.panel_buttons[name] = b
         lay.addStretch(3)
-        lay.addWidget(_label('Optical Flares', 'brand'))
+        lay.addWidget(_label('CaretaFlares', 'brand'))
         lay.addSpacing(8)
         lay.addWidget(_label(VERSION, 'dim'))
         return frame
@@ -1466,7 +1466,7 @@ class OptionsWindow(QtWidgets.QDialog):
         try:
             self.preset = ofp.load(path)
         except Exception as exc:
-            QtWidgets.QMessageBox.warning(self, 'Optical Flares', 'Nao abriu: %s' % exc)
+            QtWidgets.QMessageBox.warning(self, 'CaretaFlares', 'Nao abriu: %s' % exc)
             return
         self.original = self.preset.clone()
         self.preset_name = os.path.splitext(os.path.basename(path))[0]
@@ -1477,13 +1477,13 @@ class OptionsWindow(QtWidgets.QDialog):
 
     def _load_preset_dialog(self):
         path, _ = QtWidgets.QFileDialog.getOpenFileName(self, 'Load Preset', fb.presets_root(),
-                                                        'Optical Flares (*.ofp)')
+                                                        'CaretaFlares preset (*.ofp)')
         if path:
             self._load_preset(path)
 
     def _save_preset(self):
         start = os.path.join(fb.presets_root(), self.browse_rel, (self.preset_name or 'Meu Flare') + '.ofp')
-        path, _ = QtWidgets.QFileDialog.getSaveFileName(self, 'Save Preset', start, 'Optical Flares (*.ofp)')
+        path, _ = QtWidgets.QFileDialog.getSaveFileName(self, 'Save Preset', start, 'CaretaFlares preset (*.ofp)')
         if not path:
             return
         with open(path, 'wb') as fh:
@@ -1526,7 +1526,7 @@ class OptionsWindow(QtWidgets.QDialog):
             print('OK (sem no): %d bytes, %d objetos' % (len(data), len(self.preset.objects)))
             self.accept()
             return
-        nuke.Undo.begin('Optical Flares: Options')
+        nuke.Undo.begin('CaretaFlares: Options')
         try:
             if self.preset_path and 'ofpPresetFile' in node.knobs():
                 node['ofpPresetFile'].setValue(self.preset_path)
@@ -1543,7 +1543,7 @@ class OptionsWindow(QtWidgets.QDialog):
 
 
 def open_options(node=None):
-    """Botao Options do no: ofndk_options.open_options(nuke.thisNode())."""
+    """Botao Options do no: caretaflares_options.open_options(nuke.thisNode())."""
     global _window
     data = None
     name = ''
@@ -1575,12 +1575,12 @@ if __name__ == '__main__':
         args.remove(shot)
     data = open(args[0], 'rb').read() if args else None
     w = OptionsWindow(None, data)
-    if os.environ.get('OFNDK_SHOT_BROWSE'):
-        w._go(os.environ['OFNDK_SHOT_BROWSE'])
+    if os.environ.get('CARETAFLARES_SHOT_BROWSE'):
+        w._go(os.environ['CARETAFLARES_SHOT_BROWSE'])
     w.show()
     if shot:
         def grab():
             w.grab().save(shot)
             app.quit()
-        QtCore.QTimer.singleShot(int(os.environ.get('OFNDK_SHOT_MS', '6000')), grab)
+        QtCore.QTimer.singleShot(int(os.environ.get('CARETAFLARES_SHOT_MS', '6000')), grab)
     app.exec_() if hasattr(app, 'exec_') else app.exec()

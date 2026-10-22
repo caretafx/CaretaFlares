@@ -1,17 +1,17 @@
-"""Monta dist/OpticalFlaresNDK: uma pasta-plugin que funciona copiada para qualquer PC.
+"""Monta dist/CaretaFlares: uma pasta-plugin que funciona copiada para qualquer PC.
 
     python tools/make_dist.py            (com presets e texturas)
     python tools/make_dist.py --sem-dados
 
 Resultado:
-    dist/OpticalFlaresNDK/init.py, menu.py, ofndk_browser.py, LEIA-ME.txt, icons/
-    dist/OpticalFlaresNDK/Nuke15.2/OpticalFlares.dll + ofthumb.dll
-    dist/OpticalFlaresNDK/Nuke17.0/OpticalFlares.dll + ofthumb.dll
-    dist/OpticalFlaresNDK/Optical Flares Presets/   (copiados da instalacao do usuario)
-    dist/OpticalFlaresNDK/Optical Flares Textures/  (idem)
+    dist/CaretaFlares/init.py, menu.py, caretaflares_*.py, LEIA-ME.txt, icons/
+    dist/CaretaFlares/Nuke15.2/CaretaFlares.dll + CaretaFlaresThumb.dll
+    dist/CaretaFlares/Nuke17.0/CaretaFlares.dll + CaretaFlaresThumb.dll
+    dist/CaretaFlares/Presets/    (presets)
+    dist/CaretaFlares/Textures/   (texturas: Elements/ e Glass/)
 
-Os presets e texturas sao da Video Copilot (licenca do usuario): entram so no
-pacote local, nunca no git (dist/ esta no .gitignore).
+Os presets e texturas sao copiados da pasta de dados do usuario (fora do git;
+dist/ esta no .gitignore).
 """
 import os
 import shutil
@@ -19,13 +19,16 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BUILDS = {'Nuke15.2': 'Nuke15.2v9', 'Nuke17.0': 'Nuke17.0v2'}
-PACKAGE_FILES = ('init.py', 'menu.py', 'ofndk_browser.py', 'ofndk_options.py', 'ofndk_preset.py',
-                 'ofndk_params.py', 'LEIA-ME.txt')
-DATA = ('Optical Flares Presets', 'Optical Flares Textures')
+PACKAGE_FILES = ('init.py', 'menu.py', 'caretaflares_browser.py', 'caretaflares_options.py',
+                 'caretaflares_preset.py', 'caretaflares_params.py', 'LEIA-ME.txt')
+DLLS = ('CaretaFlares.dll', 'CaretaFlaresThumb.dll')
+# pasta no pacote <- pasta na origem dos dados
+DATA = {'Presets': 'Optical Flares Presets', 'Textures': 'Optical Flares Textures'}
 
 
-def install_dir():
-    p = os.environ.get('OPTICAL_FLARES_PATH') or os.path.expanduser('~/.nuke/OpticalFlares')
+def data_dir():
+    p = os.environ.get('CARETAFLARES_DATA') or os.environ.get('OPTICAL_FLARES_PATH') \
+        or os.path.expanduser('~/.nuke/OpticalFlares')
     return p
 
 
@@ -49,7 +52,7 @@ def sync_tree(src, dst):
 
 def main():
     with_data = '--sem-dados' not in sys.argv
-    dist = os.path.join(ROOT, 'dist', 'OpticalFlaresNDK')
+    dist = os.path.join(ROOT, 'dist', 'CaretaFlares')
     os.makedirs(dist, exist_ok=True)
     for f in PACKAGE_FILES:
         shutil.copy2(os.path.join(ROOT, 'package', f), dist)
@@ -57,7 +60,7 @@ def main():
     ok = True
     for sub, build in BUILDS.items():
         os.makedirs(os.path.join(dist, sub), exist_ok=True)
-        for dll in ('OpticalFlares.dll', 'ofthumb.dll'):
+        for dll in DLLS:
             src = os.path.join(ROOT, 'build', build, dll)
             if not os.path.isfile(src):
                 print('faltando: ' + src)
@@ -66,14 +69,14 @@ def main():
             shutil.copy2(src, os.path.join(dist, sub, dll))
         print('ok: ' + sub)
     if with_data:
-        for d in DATA:
-            src = os.path.join(install_dir(), d)
+        for name, src_name in DATA.items():
+            src = os.path.join(data_dir(), src_name)
             if not os.path.isdir(src):
-                print('sem dados da instalacao: ' + src)
+                print('sem dados: ' + src)
                 ok = False
                 continue
-            n = sync_tree(src, os.path.join(dist, d))
-            print('ok: %s (%d arquivos copiados)' % (d, n))
+            n = sync_tree(src, os.path.join(dist, name))
+            print('ok: %s (%d arquivos copiados)' % (name, n))
     print(dist)
     return 0 if ok else 1
 

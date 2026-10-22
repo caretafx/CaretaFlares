@@ -1878,7 +1878,7 @@ void applyOutput(float* buf, size_t pixels, float expo)
 // faixa livre. Cada pixel so depende da propria faixa, entao o resultado e identico.
 int workerCount()
 {
-    if (const char* env = std::getenv("OFNDK_THREADS")) {
+    if (const char* env = std::getenv("CARETAFLARES_THREADS")) {
         const int n = std::atoi(env);
         if (n > 0) return std::min(n, 64);
     }
@@ -2002,7 +2002,7 @@ void FlareRenderer::render(const Preset& preset, const RenderSettings& st, const
     const bool screen = preset.globals.getInt(9, 0) == 1;
     const bool aberration = aberrationOn(preset);
     int band = std::max(4, std::min(16, H / (workerCount() * 4)));  // ~4 faixas por thread
-    if (const char* env = std::getenv("OFNDK_BAND")) band = std::max(1, std::atoi(env));
+    if (const char* env = std::getenv("CARETAFLARES_BAND")) band = std::max(1, std::atoi(env));
     // copia para a aberracao (ela le vizinhos de outras faixas), preenchida na fase 1
     std::unique_ptr<float[]> copy(aberration ? new float[pixels * 4] : nullptr);
 

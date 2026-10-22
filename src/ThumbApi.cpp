@@ -1,4 +1,4 @@
-// ThumbApi.cpp - ofthumb.dll: renderiza miniaturas de presets para o browser
+// ThumbApi.cpp - CaretaFlaresThumb.dll: renderiza miniaturas de presets para o browser
 // (Python/ctypes). Nao depende do Nuke, entao tambem roda fora dele nos testes.
 #include <algorithm>
 #include <cstdint>

@@ -1,38 +1,33 @@
-OpticalFlaresNDK - Optical Flares reescrito para Nuke 15.2 e 17.0 (Windows)
-=========================================================================
+CaretaFlares - lens flares para Nuke 15.2 e 17.0 (Windows)
+==========================================================
 
-Esta pasta e o plugin inteiro: os DLLs das duas versoes do Nuke, o browser de
-presets, o icone, e os presets e texturas. Nao precisa do Optical Flares da
-Video Copilot instalado.
+Esta pasta e o plugin inteiro: os DLLs das duas versoes do Nuke, a janela
+Options (Preview, Stack, Editor, Browser), o icone, e os presets e texturas.
 
 INSTALAR EM OUTRO PC
 --------------------
 Opcao A (com NukeShared / _AutoInstaller):
-    copie a pasta OpticalFlaresNDK para .nuke\Careta\Repository\_AutoInstaller\
+    copie a pasta CaretaFlares para .nuke\Careta\Repository\_AutoInstaller\
     e abra o Nuke. Pronto.
 
 Opcao B (Nuke "puro"):
-    1. copie a pasta OpticalFlaresNDK para C:\Users\<voce>\.nuke\
+    1. copie a pasta CaretaFlares para C:\Users\<voce>\.nuke\
     2. no arquivo C:\Users\<voce>\.nuke\init.py acrescente a linha:
-           nuke.pluginAddPath('./OpticalFlaresNDK')
+           nuke.pluginAddPath('./CaretaFlares')
        (se o init.py nao existir, crie com:  import nuke  e a linha acima)
-    3. abra o Nuke: o no fica em Nodes > VideoCopilot > OpticalFlares
-       (ou Tab e digite OpticalFlares).
+    3. abra o Nuke: o no fica em Nodes > CaretaFlares
+       (ou Tab e digite CaretaFlares).
 
-Se o PC tiver o Optical Flares antigo da Video Copilot no plugin path, tire-o
-(ele tem o mesmo nome de no e o Nuke carregaria o antigo).
+Requisitos: Windows, Nuke 15.2 ou 17.0 (qualquer build dessas versoes).
+
+Scripts antigos do Optical Flares (Video Copilot) abrem neste no: o DLL tambem
+responde pelo nome "OpticalFlares". Ao salvar, o no passa a se chamar
+CaretaFlares. Se o PC tiver o Optical Flares da Video Copilot no plugin path,
+tire-o (os dois usariam o mesmo nome antigo).
 
 USO
 ---
-- Botao "Preset Browser": escolhe o flare com miniaturas; duplo clique aplica.
-- Scripts .nk antigos do Optical Flares abrem com o mesmo flare (o preset fica
-  salvo dentro do script).
-- Miniaturas ficam em %LOCALAPPDATA%\OpticalFlaresNDK\thumbs (pode apagar).
-- Para medir o tempo de render: variavel OFNDK_LOG=1 grava
-  %LOCALAPPDATA%\OpticalFlaresNDK\render.log.
-
-ATENCAO
--------
-Os presets e texturas ("Optical Flares Presets" e "Optical Flares Textures")
-sao da Video Copilot e vem da licenca do dono deste pacote. Use so nas suas
-maquinas; nao compartilhe.
+- Botao "Options": escolhe e edita o flare; OK aplica no no.
+- Miniaturas ficam em %LOCALAPPDATA%\CaretaFlares\thumbs (pode apagar).
+- Tempo de cada render: %LOCALAPPDATA%\CaretaFlares\render.log
+  (variavel CARETAFLARES_LOG=0 desliga).

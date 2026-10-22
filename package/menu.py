@@ -1,14 +1,13 @@
-# OpticalFlaresNDK - entrada no menu Nodes.
-# Se o ~/.nuke/menu.py ja tiver "VideoCopilot/OpticalFlares" (como no PC original),
-# nao duplica: o item existente ja cria o no novo.
+# CaretaFlares - entrada no menu Nodes (barra lateral), com icone proprio.
 import os
 
 import nuke
 
-_of_icons = os.path.dirname(__file__).replace('\\', '/') + '/icons'
-_of_toolbar = nuke.toolbar('Nodes')
-if _of_toolbar is not None and _of_toolbar.findItem('VideoCopilot/OpticalFlares') is None:
-    _of_menu = _of_toolbar.findItem('VideoCopilot') or _of_toolbar.addMenu(
-        'VideoCopilot', icon=_of_icons + '/OpticalFlaresNDK_menu.png')
-    _of_menu.addCommand('OpticalFlares', "nuke.createNode('OpticalFlares')",
-                        icon=_of_icons + '/OpticalFlaresNDK_menu.png')
+_cf_icons = os.path.dirname(os.path.abspath(__file__)).replace('\\', '/') + '/icons'
+_cf_toolbar = nuke.toolbar('Nodes')
+if _cf_toolbar is not None:
+    _cf_menu = _cf_toolbar.findItem('CaretaFlares') or _cf_toolbar.addMenu(
+        'CaretaFlares', icon=_cf_icons + '/CaretaFlares_menu.png')
+    if _cf_menu.findItem('CaretaFlares') is None:
+        _cf_menu.addCommand('CaretaFlares', "nuke.createNode('CaretaFlares')",
+                            icon=_cf_icons + '/CaretaFlares_menu.png')

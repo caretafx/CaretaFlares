@@ -1,6 +1,6 @@
 """Desenha o icone do no (arte propria): brilho laranja com estrela de 4 pontas.
 
-    python tools/make_icon.py   ->  package/icons/OpticalFlaresNDK.png (e _menu 24px)
+    python tools/make_icon.py   ->  package/icons/CaretaFlares.png (e _menu 24px)
 """
 import math
 import os
@@ -38,8 +38,8 @@ def draw(size):
 def main():
     out = os.path.join(ROOT, 'package', 'icons')
     os.makedirs(out, exist_ok=True)
-    draw(64).save(os.path.join(out, 'OpticalFlaresNDK.png'))
-    draw(64).resize((24, 24), Image.LANCZOS).save(os.path.join(out, 'OpticalFlaresNDK_menu.png'))
+    draw(64).save(os.path.join(out, 'CaretaFlares.png'))
+    draw(64).resize((24, 24), Image.LANCZOS).save(os.path.join(out, 'CaretaFlares_menu.png'))
     print(out)
 
 

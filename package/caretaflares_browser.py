@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
-"""Browser de presets do OpticalFlares (plugin novo, NDK).
+"""Browser de presets do CaretaFlares.
 
 Abre pelo botao "Preset Browser" do no. Lista os .ofp da instalacao do usuario
-(~/.nuke/OpticalFlares/Optical Flares Presets ou OPTICAL_FLARES_PRESET_PATH),
-com miniaturas renderizadas pelo ofthumb.dll (mesmo renderizador do no) e guardadas
-em %LOCALAPPDATA%/OpticalFlaresNDK/thumbs.
+(os presets ao lado deste arquivo; se nao houver, a instalacao da Video Copilot),
+com miniaturas renderizadas pelo CaretaFlaresThumb.dll (mesmo renderizador do no) e guardadas
+em %LOCALAPPDATA%/CaretaFlares/thumbs.
 
 Funciona no Nuke 15 (PySide2) e 17 (PySide6). Fora do Nuke serve para teste:
-    python ofndk_browser.py [--shot SAIDA.png]
+    python caretaflares_browser.py [--shot SAIDA.png]
 """
 from __future__ import print_function
 
@@ -31,7 +31,7 @@ HERE = os.path.dirname(os.path.abspath(__file__)).replace('\\', '/')
 THUMB_W, THUMB_H = 256, 144
 PREVIEW_W, PREVIEW_H = 640, 360
 # o teste do Nuke (tools/nuke_test.py) aponta para o build; no pacote fica ao lado do DLL do no
-THUMB_DLL = os.environ.get('OFNDK_THUMB_DLL', '')
+THUMB_DLL = os.environ.get('CARETAFLARES_THUMB_DLL', '')
 
 _window = None
 
@@ -44,22 +44,22 @@ def _install_dir():
 
 def presets_root():
     # pacote portatil primeiro (presets ao lado deste arquivo), depois a instalacao da Video Copilot
-    if os.path.isdir(HERE + '/Optical Flares Presets'):
-        return HERE + '/Optical Flares Presets'
+    if os.path.isdir(HERE + '/Presets'):
+        return HERE + '/Presets'
     p = os.environ.get('OPTICAL_FLARES_PRESET_PATH') or _install_dir() + '/Optical Flares Presets'
     return p.replace('\\', '/')
 
 
 def textures_root():
-    if os.path.isdir(HERE + '/Optical Flares Textures'):
-        return HERE + '/Optical Flares Textures'
+    if os.path.isdir(HERE + '/Textures'):
+        return HERE + '/Textures'
     p = os.environ.get('OPTICAL_FLARES_TEXTURE_PATH') or _install_dir() + '/Optical Flares Textures'
     return p.replace('\\', '/')
 
 
 def cache_dir():
     base = os.environ.get('LOCALAPPDATA') or os.path.expanduser('~')
-    d = os.path.join(base, 'OpticalFlaresNDK', 'thumbs')
+    d = os.path.join(base, 'CaretaFlares', 'thumbs')
     if not os.path.isdir(d):
         os.makedirs(d)
     return d
@@ -74,12 +74,12 @@ def _nuke_folder():
 def _thumb_dll_path():
     if THUMB_DLL and os.path.isfile(THUMB_DLL):
         return THUMB_DLL
-    return os.path.join(HERE, _nuke_folder(), 'ofthumb.dll')
+    return os.path.join(HERE, _nuke_folder(), 'CaretaFlaresThumb.dll')
 
 
 # ----------------------------------------------------------------- renderizador
 class Renderer(object):
-    """ofthumb.dll via ctypes. A chamada solta o GIL, entao roda bem numa thread."""
+    """CaretaFlaresThumb.dll via ctypes. A chamada solta o GIL, entao roda bem numa thread."""
 
     def __init__(self):
         path = _thumb_dll_path()
@@ -123,7 +123,7 @@ class ThumbWorker(QtCore.QObject):
         self.cond = threading.Condition()
         self.queue = []
         self.alive = True
-        self.thread = threading.Thread(target=self._run, name='ofndk-thumbs')
+        self.thread = threading.Thread(target=self._run, name='caretaflares-thumbs')
         self.thread.daemon = True
         self.thread.start()
 
@@ -168,7 +168,7 @@ class ThumbWorker(QtCore.QObject):
                         img.save(path, 'PNG')
                 self.done.emit(key, img, n)
             except Exception as exc:  # nunca derruba o Nuke por causa de miniatura
-                print('OpticalFlares browser: %s: %s' % (ofp, exc))
+                print('CaretaFlares browser: %s: %s' % (ofp, exc))
 
 
 # ----------------------------------------------------------------- janela
@@ -193,7 +193,7 @@ class PresetBrowser(QtWidgets.QDialog):
     def __init__(self, node=None, parent=None):
         super(PresetBrowser, self).__init__(parent)
         self.node_name = node.fullName() if node is not None else None
-        self.setWindowTitle('Optical Flares  -  Preset Browser')
+        self.setWindowTitle('CaretaFlares  -  Preset Browser')
         self.setStyleSheet(STYLE)
         self.resize(1280, 760)
         self.root = presets_root()
@@ -403,12 +403,12 @@ class PresetBrowser(QtWidgets.QDialog):
                 if close:
                     self.close()
                 return
-            QtWidgets.QMessageBox.warning(self, 'Optical Flares', 'O no %s nao existe mais.' % self.node_name)
+            QtWidgets.QMessageBox.warning(self, 'CaretaFlares', 'O no %s nao existe mais.' % self.node_name)
             return
         with open(path, 'rb') as fh:
             data = fh.read()
         state = '%d;%s' % (len(data), ''.join('%02x' % b for b in bytearray(data)))
-        nuke.Undo.begin('Optical Flares: preset')
+        nuke.Undo.begin('CaretaFlares: preset')
         try:
             node['renderOptions'].setValue(state)
             if 'ofpPresetName' in node.knobs():
@@ -426,7 +426,7 @@ class PresetBrowser(QtWidgets.QDialog):
 
 
 def open_browser(node=None):
-    """Chamado pelo botao do no: ofndk_browser.open_browser(nuke.thisNode())."""
+    """Chamado pelo botao do no: caretaflares_browser.open_browser(nuke.thisNode())."""
     global _window
     if _window is not None:
         try:
@@ -452,5 +452,5 @@ if __name__ == '__main__':
             app.quit()
 
         # espera as miniaturas da pasta raiz
-        QtCore.QTimer.singleShot(int(os.environ.get('OFNDK_SHOT_MS', '6000')), shot)
+        QtCore.QTimer.singleShot(int(os.environ.get('CARETAFLARES_SHOT_MS', '6000')), shot)
     app.exec_() if hasattr(app, 'exec_') else app.exec()
