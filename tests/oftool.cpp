@@ -44,6 +44,13 @@ static int scan(const char* folder)
     return ok == total ? 0 : 1;
 }
 
+// texturas: CARETAFLARES_DATA/Textures ou data/Textures (rodando da raiz do projeto)
+static std::string textureRoot()
+{
+    const char* d = std::getenv("CARETAFLARES_DATA");
+    return (d && *d) ? std::string(d) + "/Textures" : std::string("data/Textures");
+}
+
 static int render(int argc, char** argv)
 {
     if (argc < 8) {
@@ -62,11 +69,7 @@ static int render(int argc, char** argv)
     st.height = std::atoi(argv[4]);
     st.centerX = argc > 9 ? float(std::atof(argv[8])) : st.width * 0.5f;
     st.centerY = argc > 9 ? float(std::atof(argv[9])) : st.height * 0.5f;
-    {
-        const char* t = std::getenv("OPTICAL_FLARES_TEXTURE_PATH");
-        const char* h = std::getenv("USERPROFILE");
-        st.textureRoot = t ? std::string(t) : std::string(h ? h : "") + "/.nuke/OpticalFlares/Optical Flares Textures";
-    }
+    st.textureRoot = textureRoot();
     if (const char* solo = std::getenv("OF_SOLO")) st.soloFlareId = std::atoi(solo);
     Light l;
     l.x = float(std::atof(argv[5]));
@@ -107,8 +110,7 @@ static int bench(int argc, char** argv)
     st.height = std::atoi(argv[4]);
     st.centerX = st.width * 0.5f;
     st.centerY = st.height * 0.5f;
-    const char* h = std::getenv("USERPROFILE");
-    st.textureRoot = std::string(h ? h : "") + "/.nuke/OpticalFlares/Optical Flares Textures";
+    st.textureRoot = textureRoot();
     Light l;
     l.x = st.width * 0.3f;
     l.y = st.height * 0.6f;

@@ -253,7 +253,8 @@ def decode_state(text):
 if __name__ == '__main__':  # teste de ida e volta em todos os presets
     import os
     import sys
-    root = sys.argv[1] if len(sys.argv) > 1 else os.path.expanduser('~/.nuke/OpticalFlares/Optical Flares Presets')
+    root = sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                                              '..', 'data', 'Presets')
     total = bad = 0
     for dp, _, fs in os.walk(root):
         for f in fs:

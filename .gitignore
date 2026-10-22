@@ -17,3 +17,5 @@ tmp/
 dist/
 __pycache__/
 *.pyc
+# presets e texturas usados no pacote (material da Video Copilot, fora do git)
+data/

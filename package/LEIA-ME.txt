@@ -28,6 +28,8 @@ tire-o (os dois usariam o mesmo nome antigo).
 USO
 ---
 - Botao "Options": escolhe e edita o flare; OK aplica no no.
+- Todo no novo ja nasce com o flare de default.ofp (nesta pasta). Para trocar o
+  padrao, substitua esse arquivo por qualquer preset .ofp.
 - Miniaturas ficam em %LOCALAPPDATA%\CaretaFlares\thumbs (pode apagar).
 - Tempo de cada render: %LOCALAPPDATA%\CaretaFlares\render.log
   (variavel CARETAFLARES_LOG=0 desliga).

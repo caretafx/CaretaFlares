@@ -7,11 +7,12 @@ Resultado:
     dist/CaretaFlares/init.py, menu.py, caretaflares_*.py, LEIA-ME.txt, icons/
     dist/CaretaFlares/Nuke15.2/CaretaFlares.dll + CaretaFlaresThumb.dll
     dist/CaretaFlares/Nuke17.0/CaretaFlares.dll + CaretaFlaresThumb.dll
-    dist/CaretaFlares/Presets/    (presets)
+    dist/CaretaFlares/Presets/    (presets; Pro Presets 1 e 2 dentro de Lens Flares)
     dist/CaretaFlares/Textures/   (texturas: Elements/ e Glass/)
+    dist/CaretaFlares/default.ofp (flare que o no ganha ao ser criado)
 
-Os presets e texturas sao copiados da pasta de dados do usuario (fora do git;
-dist/ esta no .gitignore).
+Presets, texturas e default.ofp vem de data/ no projeto (fora do git, como dist/).
+As pastas de dados sao espelhadas: o que nao existe em data/ sai do pacote.
 """
 import os
 import shutil
@@ -22,14 +23,11 @@ BUILDS = {'Nuke15.2': 'Nuke15.2v9', 'Nuke17.0': 'Nuke17.0v2'}
 PACKAGE_FILES = ('init.py', 'menu.py', 'caretaflares_browser.py', 'caretaflares_options.py',
                  'caretaflares_preset.py', 'caretaflares_params.py', 'LEIA-ME.txt')
 DLLS = ('CaretaFlares.dll', 'CaretaFlaresThumb.dll')
-# pasta no pacote <- pasta na origem dos dados
-DATA = {'Presets': 'Optical Flares Presets', 'Textures': 'Optical Flares Textures'}
+DATA = ('Presets', 'Textures')
 
 
 def data_dir():
-    p = os.environ.get('CARETAFLARES_DATA') or os.environ.get('OPTICAL_FLARES_PATH') \
-        or os.path.expanduser('~/.nuke/OpticalFlares')
-    return p
+    return os.environ.get('CARETAFLARES_DATA') or os.path.join(ROOT, 'data')
 
 
 def sync_tree(src, dst):
@@ -48,6 +46,20 @@ def sync_tree(src, dst):
             shutil.copy2(s, d)
             copied += 1
     return copied
+
+
+def mirror_extras(src, dst):
+    """Apaga do destino o que nao existe mais na origem (dados reorganizados)."""
+    removed = 0
+    for dp, dirs, files in os.walk(dst, topdown=False):
+        rel = os.path.relpath(dp, dst)
+        for f in files:
+            if not os.path.isfile(os.path.join(src, rel, f)):
+                os.remove(os.path.join(dp, f))
+                removed += 1
+        if dp != dst and not os.listdir(dp):
+            os.rmdir(dp)
+    return removed
 
 
 def main():
@@ -69,14 +81,22 @@ def main():
             shutil.copy2(src, os.path.join(dist, sub, dll))
         print('ok: ' + sub)
     if with_data:
-        for name, src_name in DATA.items():
-            src = os.path.join(data_dir(), src_name)
+        for name in DATA:
+            src = os.path.join(data_dir(), name)
             if not os.path.isdir(src):
                 print('sem dados: ' + src)
                 ok = False
                 continue
             n = sync_tree(src, os.path.join(dist, name))
-            print('ok: %s (%d arquivos copiados)' % (name, n))
+            r = mirror_extras(src, os.path.join(dist, name))
+            print('ok: %s (%d copiados, %d removidos)' % (name, n, r))
+        default = os.path.join(data_dir(), 'default.ofp')
+        if os.path.isfile(default):
+            shutil.copy2(default, os.path.join(dist, 'default.ofp'))
+            print('ok: default.ofp')
+        else:
+            print('sem default.ofp em ' + data_dir())
+            ok = False
     print(dist)
     return 0 if ok else 1
 

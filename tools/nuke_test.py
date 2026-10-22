@@ -101,10 +101,8 @@ def _of_run():
     fmt = node.format()
     node['PositionXY'].setValue([fmt.width() * 0.3, fmt.height() * 0.6])
     node['CenterPosition'].setValue([fmt.width() * 0.5, fmt.height() * 0.5])
-    presets = os.environ.get(
-        'OPTICAL_FLARES_PRESET_PATH',
-        os.path.expanduser('~/.nuke/OpticalFlares/Optical Flares Presets'),
-    ).replace('\\', '/')
+    os.environ.setdefault('CARETAFLARES_DATA', _OF_ROOT + '/data')  # texturas para o DLL do build
+    presets = _OF_ROOT + '/data/Presets/Lens Flares/Pro Presets'
     # troque o nome para testar outro preset (OF_TEST_PRESET tambem funciona)
     preset = presets + '/' + os.environ.get('OF_TEST_PRESET', 'Natural Light') + '.ofp'
     _of_log('preset: %s (existe=%s)' % (preset, os.path.isfile(preset)))

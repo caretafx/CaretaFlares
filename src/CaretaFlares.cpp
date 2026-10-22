@@ -498,7 +498,7 @@ static void sampleMatte(Iop& matte, int cx, int cy, int radius, float& alpha, fl
     rgb[2] = float(sb / n);
 }
 
-// Pasta "Optical Flares Textures" da instalacao do usuario (Elements/ e Glass/).
+// Texturas (Elements/ e Glass/) ficam em <pacote>/Textures.
 // Pasta do pacote: o DLL fica em <pacote>/NukeXX.X/CaretaFlares.dll.
 static std::string packageRoot()
 {
@@ -529,14 +529,10 @@ static std::string textureRoot()
                                                                                                : std::string();
     }();
     if (!bundled.empty()) return bundled;
-    // 2) instalacao da Video Copilot
-    std::string p = env("OPTICAL_FLARES_TEXTURE_PATH");
-    if (!p.empty()) return p;
-    p = env("OPTICAL_FLARES_PATH");
-    if (!p.empty()) return p + "/Optical Flares Textures";
-    std::string home = env("USERPROFILE");
-    if (home.empty()) home = env("HOME");
-    return home + "/.nuke/OpticalFlares/Optical Flares Textures";
+    // 2) pasta de dados indicada (testes a partir do build)
+    const std::string data = env("CARETAFLARES_DATA");
+    if (!data.empty()) return data + "/Textures";
+    return std::string();
 }
 
 // Cada render grava uma linha em %LOCALAPPDATA%/CaretaFlares/render.log

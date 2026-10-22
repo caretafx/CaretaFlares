@@ -37,24 +37,22 @@ _window = None
 
 
 # ----------------------------------------------------------------- caminhos
-def _install_dir():
-    base = os.environ.get('OPTICAL_FLARES_PATH') or os.path.expanduser('~/.nuke/OpticalFlares')
-    return base.replace('\\', '/')
+def _data_root(name):
+    """Pasta de dados: a do proprio pacote; senao CARETAFLARES_DATA; senao data/ do projeto
+    (quando rodando direto do codigo, nos testes)."""
+    for base in (HERE, os.environ.get('CARETAFLARES_DATA', ''),
+                 os.path.join(os.path.dirname(HERE), 'data')):
+        if base and os.path.isdir(os.path.join(base, name)):
+            return os.path.join(base, name).replace('\\', '/')
+    return (HERE + '/' + name).replace('\\', '/')
 
 
 def presets_root():
-    # pacote portatil primeiro (presets ao lado deste arquivo), depois a instalacao da Video Copilot
-    if os.path.isdir(HERE + '/Presets'):
-        return HERE + '/Presets'
-    p = os.environ.get('OPTICAL_FLARES_PRESET_PATH') or _install_dir() + '/Optical Flares Presets'
-    return p.replace('\\', '/')
+    return _data_root('Presets')
 
 
 def textures_root():
-    if os.path.isdir(HERE + '/Textures'):
-        return HERE + '/Textures'
-    p = os.environ.get('OPTICAL_FLARES_TEXTURE_PATH') or _install_dir() + '/Optical Flares Textures'
-    return p.replace('\\', '/')
+    return _data_root('Textures')
 
 
 def cache_dir():
