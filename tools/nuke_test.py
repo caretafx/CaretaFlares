@@ -76,8 +76,9 @@ def _of_run():
         os.environ['CARETAFLARES_THUMB_DLL'] = thumb_copy
         try:
             import importlib
-            import caretaflares_browser, caretaflares_preset, caretaflares_params, caretaflares_options
-            for mod in (caretaflares_browser, caretaflares_preset, caretaflares_params, caretaflares_options):
+            import caretaflares_browser, caretaflares_preset, caretaflares_params, caretaflares_options, caretaflares_track
+            for mod in (caretaflares_browser, caretaflares_preset, caretaflares_params, caretaflares_options,
+                        caretaflares_track):
                 importlib.reload(mod)
             caretaflares_browser.THUMB_DLL = thumb_copy
             _of_log('browser pronto (miniaturas: %s)' % thumb_copy)

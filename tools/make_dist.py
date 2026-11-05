@@ -21,7 +21,7 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BUILDS = {'Nuke15.2': 'Nuke15.2v9', 'Nuke17.0': 'Nuke17.0v2'}
 PACKAGE_FILES = ('init.py', 'menu.py', 'caretaflares_browser.py', 'caretaflares_options.py',
-                 'caretaflares_preset.py', 'caretaflares_params.py', 'LEIA-ME.txt')
+                 'caretaflares_preset.py', 'caretaflares_params.py', 'caretaflares_track.py', 'LEIA-ME.txt')
 DLLS = ('CaretaFlares.dll', 'CaretaFlaresThumb.dll')
 DATA = ('Presets', 'Textures')
 

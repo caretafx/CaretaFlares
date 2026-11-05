@@ -24,6 +24,8 @@
 #include "DDImage/Knobs.h"
 #include "DDImage/Row.h"
 #include "DDImage/Thread.h"
+#include "DDImage/ViewerContext.h"
+#include "DDImage/gl.h"
 
 #define WIN32_LEAN_AND_MEAN
 #ifndef NOMINMAX
@@ -113,6 +115,9 @@ public:
     void _validate(bool forReal) override;
     void _request(int x, int y, int r, int t, ChannelMask channels, int count) override;
     void engine(int y, int x, int r, ChannelMask channels, Row& out) override;
+    void append(Hash& hash) override;
+    void build_handles(ViewerContext* ctx) override;
+    void draw_handle(ViewerContext* ctx) override;
 
     static const Op::Description description;
 
@@ -121,6 +126,7 @@ private:
     void loadPresetFile();
     void updateEnabledKnobs();
     void ensureRendered();
+    void updateTrackOffset();
 
     // knobs do original -----------------------------------------------------
     FormatPair format_;
@@ -128,6 +134,12 @@ private:
     float positionXY_[2];
     float centerPosition_[2];
     int sourceType_ = 0;
+    // Tracking (novo): a luz anda o quanto o track andou desde o frame de referencia
+    bool useTrack_ = false;
+    double trackPosition_[2] = {0.0, 0.0};
+    int trackRefFrame_ = 1;
+    bool trackCenter_ = false;
+    double trackOffset_[2] = {0.0, 0.0};  // calculado no _validate
     int count_ = 0;
     float lightBrightness_[kMaxExtraLights + 1];
     float lightScale_[kMaxExtraLights + 1];
@@ -212,6 +224,31 @@ void CaretaFlares::knobs(Knob_Callback f)
     SetFlags(f, Knob::STARTLINE);
     Button(f, "InitCenter", "Init Center");
     Enumeration_knob(f, &sourceType_, kSourceType, "SourceType", "Source Type");
+
+    BeginClosedGroup(f, "Tracking", "Tracking");
+    Bool_knob(f, &useTrack_, "UseTrack", "Use Track");
+    SetFlags(f, Knob::STARTLINE);
+    Tooltip(f, "Faz o flare acompanhar um track sem ficar preso a ele: posicione o flare onde "
+               "quiser no Reference Frame; nos outros frames ele se move o quanto o Track "
+               "Position andou desde esse frame.");
+    PyScript_knob(f,
+                  "import caretaflares_track\n"
+                  "caretaflares_track.link_tracker(nuke.thisNode())",
+                  "LinkTrack", "Link to Tracker...");
+    Tooltip(f, "Escolhe um Tracker e um track: liga o Track Position a ele por expressao, "
+               "usa o frame atual como referencia e liga o Use Track.");
+    XY_knob(f, trackPosition_, "TrackPosition", "Track Position");
+    SetFlags(f, Knob::NO_HANDLES);
+    Tooltip(f, "Ponto rastreado (normalmente ligado por expressao a um Tracker).");
+    Int_knob(f, &trackRefFrame_, "TrackReferenceFrame", "Reference Frame");
+    SetFlags(f, Knob::STARTLINE);
+    Tooltip(f, "Frame em que o flare fica exatamente em Position XY.");
+    Button(f, "TrackSetReference", "Set to Current Frame");
+    Bool_knob(f, &trackCenter_, "TrackCenter", "Move Center Too");
+    SetFlags(f, Knob::STARTLINE);
+    Tooltip(f, "Aplica o mesmo deslocamento ao Center Position (normalmente o centro fica "
+               "parado no meio da tela).");
+    EndGroup(f);
 
     BeginClosedGroup(f, "Additional2DFlares", "Additional 2D Flares");
     Int_knob(f, &count_, "Count", "Count");
@@ -349,8 +386,12 @@ int CaretaFlares::knob_changed(Knob* k)
         }
         return 1;
     }
-    if (k->is("Colorspace")) {
+    if (k->is("Colorspace") || k->is("UseTrack")) {
         updateEnabledKnobs();
+        return 1;
+    }
+    if (k->is("TrackSetReference")) {
+        if (Knob* r = knob("TrackReferenceFrame")) r->set_value(outputContext().frame());
         return 1;
     }
     return Iop::knob_changed(k);
@@ -370,6 +411,10 @@ void CaretaFlares::updateEnabledKnobs()
     int colorspace = colorspace_;
     if (Knob* c = knob("Colorspace")) colorspace = int(c->get_value());
     if (Knob* g = knob("CustomGamma")) g->enable(colorspace == 1);
+    bool track = useTrack_;
+    if (Knob* t = knob("UseTrack")) track = t->get_value() != 0.0;
+    for (const char* name : {"TrackPosition", "TrackReferenceFrame", "TrackSetReference", "TrackCenter"})
+        if (Knob* kk = knob(name)) kk->enable(track);
 }
 
 void CaretaFlares::loadPresetFile()
@@ -431,6 +476,8 @@ void CaretaFlares::_validate(bool forReal)
         preset_ = preset;
     }
 
+    updateTrackOffset();
+
     copy_info(0);
     const bool bgConnected = inputConnected(0);
     const Format* fmt = format_.format();
@@ -449,6 +496,59 @@ void CaretaFlares::_validate(bool forReal)
 
     if (stateError_) warning("renderOptions corrompido; o flare foi ignorado.");
     else if (!preset_ || preset_->empty()) warning("Nenhum preset carregado (knob 'Preset (.ofp)').");
+}
+
+// Deslocamento do track: valor agora menos o valor no frame de referencia.
+void CaretaFlares::updateTrackOffset()
+{
+    trackOffset_[0] = trackOffset_[1] = 0.0;
+    if (!useTrack_) return;
+    Knob* k = knob("TrackPosition");
+    if (!k) return;
+    const double ref = double(trackRefFrame_);
+    trackOffset_[0] = trackPosition_[0] - k->get_value_at(ref, 0);
+    trackOffset_[1] = trackPosition_[1] - k->get_value_at(ref, 1);
+}
+
+// O valor do track no frame de referencia nao entra sozinho no hash (o Nuke so ve o
+// valor do frame atual); sem isso, editar o track no frame de referencia nao re-renderizaria.
+void CaretaFlares::append(Hash& hash)
+{
+    Iop::append(hash);
+    if (!useTrack_) return;
+    if (Knob* k = knob("TrackPosition")) {
+        hash.append(k->get_value_at(double(trackRefFrame_), 0));
+        hash.append(k->get_value_at(double(trackRefFrame_), 1));
+    }
+}
+
+// Com o tracking ligado, o Position XY fica parado no viewer; esta marca mostra onde a
+// luz esta de verdade no frame atual.
+void CaretaFlares::build_handles(ViewerContext* ctx)
+{
+    Iop::build_handles(ctx);
+    if (useTrack_ && ctx->transform_mode() == VIEWER_2D) add_draw_handle(ctx);
+}
+
+void CaretaFlares::draw_handle(ViewerContext* ctx)
+{
+    if (!useTrack_ || !ctx->draw_lines()) return;
+    const float x = float(positionXY_[0] + trackOffset_[0]);
+    const float y = float(positionXY_[1] + trackOffset_[1]);
+    const float r = 14.0f, c = 6.0f;
+    glColor3f(1.0f, 0.62f, 0.15f);
+    glBegin(GL_LINE_LOOP);
+    for (int i = 0; i < 24; ++i) {
+        const float a = float(i) * 6.2831853f / 24.0f;
+        glVertex2f(x + r * std::cos(a), y + r * std::sin(a));
+    }
+    glEnd();
+    glBegin(GL_LINES);
+    glVertex2f(x - c, y);
+    glVertex2f(x + c, y);
+    glVertex2f(x, y - c);
+    glVertex2f(x, y + c);
+    glEnd();
 }
 
 void CaretaFlares::_request(int x, int y, int r, int t, ChannelMask channels, int count)
@@ -583,8 +683,10 @@ void CaretaFlares::ensureRendered()
     ofndk::RenderSettings st;
     st.width = flareW_;
     st.height = flareH_;
-    st.centerX = centerPosition_[0] - flareX_;
-    st.centerY = centerPosition_[1] - flareY_;
+    const double cdx = trackCenter_ ? trackOffset_[0] : 0.0;
+    const double cdy = trackCenter_ ? trackOffset_[1] : 0.0;
+    st.centerX = float(centerPosition_[0] + cdx) - flareX_;
+    st.centerY = float(centerPosition_[1] + cdy) - flareY_;
     st.brightness = float(brightness_);
     st.scale = float(scale_);
     st.rotationDeg = float(rotationOffset_);
@@ -604,7 +706,9 @@ void CaretaFlares::ensureRendered()
     const int n = std::max(0, std::min(count_, kMaxExtraLights));
     for (int i = 0; i <= n; ++i) {
         ofndk::Light l;
-        const float* p = (i == 0) ? positionXY_ : extraPositions_[i - 1];
+        const float* src = (i == 0) ? positionXY_ : extraPositions_[i - 1];
+        // posicao efetiva: a do knob mais o deslocamento do track (0 sem tracking)
+        const float p[2] = {float(src[0] + trackOffset_[0]), float(src[1] + trackOffset_[1])};
         l.x = p[0] - flareX_;
         l.y = p[1] - flareY_;
         l.brightness = lightBrightness_[i];
