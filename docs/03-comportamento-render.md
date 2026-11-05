@@ -325,8 +325,12 @@ Implementado em `src/FlareRenderer.cpp` (renderizador em CPU) e `src/OpticalFlar
 
 Reconstruído ou incerto (confere visualmente, sem render de referência):
 
-- Hoop: orientação do arco e as duas variantes (tira com espectro e quads) foram montadas a partir
-  do desenho dos vértices; o original usa a variante tira em 128 de 142 presets.
+- ~~Hoop~~ (corrigido em 2026-11-05, pelo desenho do DLL): o arco é orientado pela direção
+  luz→centro (`ψ = −atan2((lx−cx)/aspecto, ly−cy)`); cada segmento fica em
+  `θ = 2π·(0,6·(0,5·(2t−1)⁵ + 0,5) + 0,4·t)`, concentrado no lado oposto ao objeto; as faixas têm
+  comprimento `0,5·ln(5·d + 1)` (`d` = distância angular até o objeto, zero no ponto do objeto); a
+  completion é medida a partir de `π − θ` mais a rotação. Antes disso o anel ganhava uma borda reta
+  vertical no ponto do objeto (aparecia como "corte" no Aura e em outros presets com Hoop).
 - Argumentos dos shaders do Sparkle e do Spike Ball (quais atributos entram em cada termo).
 - Orientação da textura no Iris com textura.
 - Grupo Flicker do nó (Type, Speed, Amount, Randomize, Random Seed): o nó original preenche vetores

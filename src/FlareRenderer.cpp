@@ -1619,8 +1619,8 @@ void drawHoop(Ctx& R, const FlareObject& o)
     const float d = std::sqrt(dlx * dlx + dly * dly);
     const float rx = d * s.sx, ry = d * s.sy;
     const float bright = std::min(1.0f, 2.0f * d) * (b * 0.15f + 0.85f) * 0.5f * std::min(1.0f, b);
-    // orientacao: o "-y" local aponta do objeto para o centro do flare
-    const float psi = std::atan2((R.centerX - px) / R.aspectBase, py - R.centerY) + compRot;
+    // orientacao do arco: pela direcao luz -> centro do flare (nao pela posicao do objeto)
+    const float psi = -std::atan2((R.lightX - R.centerX) / R.aspectBase, R.lightY - R.centerY);
     const float cP = std::cos(psi), sP = std::sin(psi);
     auto place = [&](Vtx& w, float x, float y) {
         const float xr = cP * x - sP * y, yr = sP * x + cP * y;
@@ -1628,23 +1628,37 @@ void drawHoop(Ctx& R, const FlareObject& o)
         w.y = yr + py;
     };
     const bool compOn = comp < kPi;
-    auto fadeAt = [&](float th) {
-        if (!compOn) return 1.0f;
-        const float a = std::fabs(wrapPi(th));
-        if (a <= comp) return 1.0f;
-        return std::max(0.0f, 1.0f - ((a - comp) / (kPi - comp)) / compFeather);
+    // Um segmento do arco na posicao t (0..1), como no original:
+    //  - os segmentos se concentram no lado oposto ao objeto: theta = 2*pi*u, com
+    //    u = 0,6*(0,5*(2t-1)^5 + 0,5) + 0,4*t (theta = 0 e 2*pi no ponto do objeto);
+    //  - o comprimento das faixas e 0,5*ln(5*d + 1), d = distancia angular ate o objeto
+    //    (vai a zero no ponto do objeto: sem isso o anel ganhava uma borda reta ali);
+    //  - a completion e medida a partir do lado oposto (pi - theta) mais a rotacao.
+    struct Seg { float th, lenF, fade; };
+    auto segAt = [&](float t) {
+        Seg g;
+        const float r = std::pow(2.0f * t - 1.0f, 5.0f);
+        g.th = (0.6f * (0.5f * r + 0.5f) + 0.4f * t) * kTwoPi;
+        float a = std::fabs(g.th);
+        if (a > kPi) a = std::fabs(kTwoPi - a);
+        g.lenF = 0.5f * std::log(5.0f * a + 1.0f);
+        g.fade = 1.0f;
+        if (compOn) {
+            const float ang = std::fabs(wrapPi(kPi - g.th + compRot));
+            if (ang > comp) g.fade = std::max(0.0f, 1.0f - ((ang - comp) / (kPi - comp)) / compFeather);
+        }
+        return g;
     };
     float col[3];
     if (band) {
         std::vector<Vtx> v(size_t(2 * n + 2));
         for (int k = 0; k < 2 * n + 2; k += 2) {
-            const float t = (float(k) * 0.5f) / float(n);
-            const float th = (2.0f * t - 1.0f) * kPi;
-            const float f = fadeAt(th);
-            const float bx = std::sin(th) * rx * radiusK;
-            const float by = (std::cos(th) - 1.0f) * ry * radiusK;
+            const Seg g = segAt((float(k) * 0.5f) / float(n));
+            const float f = g.fade;
+            const float bx = std::sin(g.th) * rx * radiusK;
+            const float by = (std::cos(g.th) - 1.0f) * ry * radiusK;
             const float phi = std::atan2(float(R.W) * bx, float(R.H) * by);
-            const float len = (1.0f - arr[size_t(k)]) * 0.5f * length;
+            const float len = (1.0f - arr[size_t(k)]) * g.lenF * length;
             Vtx& w0 = v[size_t(k)];
             w0.a[0] = 0.0f;
             w0.a[1] = f;
@@ -1655,6 +1669,9 @@ void drawHoop(Ctx& R, const FlareObject& o)
             w1.a[1] = (arr[size_t(k) + 1] * 2.0f + 0.8f) * f;
             place(w1, bx + std::sin(phi) * rx * len, by + std::cos(phi) * ry * len);
         }
+        // a fita fecha um anel: as duas metades ficam com orientacoes opostas, entao nao
+        // pode descartar triangulos "de costas" (cortava metade do anel numa linha vertical)
+        R.allowBack = true;
         drawMesh(R, v, 1, [&](const float* a, float* p) {
             const float x = (a[0] - 0.5f) * 2.0f;
             const float val = (1.0f - x * x) * a[1] * bright;
@@ -1662,19 +1679,19 @@ void drawHoop(Ctx& R, const FlareObject& o)
             shadeColor(s, a[0], col);
             addColor(p, col, val);
         });
+        R.allowBack = false;
         return;
     }
     std::vector<Vtx> v(size_t(6 * n));
     for (int i = 0; i < n; ++i) {
-        const float t = float(i) / float(n);
-        const float th = (2.0f * t - 1.0f) * kPi;
-        const float f = fadeAt(th);
-        const float bx = std::sin(th) * rx * radiusK;
-        const float by = (std::cos(th) - 1.0f) * ry * radiusK;
+        const Seg g = segAt(float(i) / float(n));
+        const float f = g.fade;
+        const float bx = std::sin(g.th) * rx * radiusK;
+        const float by = (std::cos(g.th) - 1.0f) * ry * radiusK;
         const float phi = std::atan2(float(R.W) * bx, float(R.H) * by);
         const float sp = std::sin(phi), cp = std::cos(phi);
-        const float len = (1.0f - arr[size_t(2 * i)]) * 0.5f * length;
-        const float off = 0.5f * arr[size_t(2 * i + 1)] * length;
+        const float len = (1.0f - arr[size_t(2 * i)]) * g.lenF * length;
+        const float off = g.lenF * arr[size_t(2 * i + 1)] * length;
         const float wx = lineThick * cp * 0.02f, wy = lineThick * sp * -0.02f;
         const float x0 = off * rx * sp - wx * 0.5f + bx, y0 = off * ry * cp - wy * 0.5f + by;
         const float x1 = rx * sp * len + x0, y1 = ry * cp * len + y0;
